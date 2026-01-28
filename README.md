@@ -1,0 +1,411 @@
+# YankRun
+
+<div align="center">
+  <img src="doc/logo.png" alt="YankRun" width="200">
+  <p>
+    <img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8?style=flat-square&logo=go" alt="Go Version">
+    <img src="https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-darkblue?style=flat-square&logo=windows" alt="OS Support">
+    <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
+  </p>
+</div>
+
+Template smarter: clone repos and replace tokens safely with size limits, custom delimiters, and JSON/YAML inputs.
+
+## Features
+
+-   **Template values replacement** across a directory tree
+-   **Git clone** with post-clone templating
+-   **Custom delimiters** with smart wrapping
+-   **Size-based skipping** (default 3 MB)
+-   **Verbose reporting**
+-   **JSON/YAML inputs** and ignore patterns
+-   **Transformation functions** (`toUpperCase`, `toLowerCase`, `gsub`)
+-   **Template file processing** (`.tpl` files processed and renamed)
+
+## Install
+
+### From Release
+<details>
+<summary><strong>Linux/macOS (AMD64)</strong></summary>
+
+```sh
+curl -L https://github.com/AxeForging/yankrun/releases/download/stable/yankrun-linux-amd64.tar.gz -o yankrun-linux-amd64.tar.gz
+tar -xvf yankrun-linux-amd64.tar.gz yankrun-linux-amd64
+chmod +x yankrun-linux-amd64
+sudo mv yankrun-linux-amd64 /usr/local/bin/yankrun
+```
+
+</details>
+
+<details>
+<summary><strong>GitHub discovery config</strong></summary>
+
+You can auto-discover template repos from your GitHub user and/or orgs. All fields are optional; using only orgs is fine.
+
+```yaml
+# ~/.yankrun/config.yaml (excerpt)
+github:
+  orgs: ["AxeForging", "your-org"]          # one or more orgs (optional)
+  user: "your-user"                         # your GitHub user (optional)
+  topic: "templates"                        # filter repos by topic (optional)
+  prefix: "template-"                       # filter repos by name prefix (optional)
+  include_private: true                      # include private repos (requires token)
+  token: "GITHUB_TOKEN"                      # optional; for higher rate limits/private
+```
+
+Notes:
+- If nothing is configured yet, `yankrun generate` will ask for user/orgs inline and save them.
+- When both `user` and `orgs` are set, results are merged.
+
+</details>
+
+<details>
+<summary><strong>Reset configuration</strong></summary>
+
+```sh
+yankrun setup --reset
+```
+
+Deletes `~/.yankrun/config.yaml`.
+
+</details>
+
+<details>
+<summary><strong>Linux/macOS (ARM64)</strong></summary>
+
+```sh
+curl -L https://github.com/AxeForging/yankrun/releases/download/stable/yankrun-linux-arm64.tar.gz -o yankrun-linux-arm64.tar.gz
+tar -xvf yankrun-linux-arm64.tar.gz yankrun-linux-arm64
+chmod +x yankrun-linux-arm64
+sudo mv yankrun-linux-arm64 /usr/local/bin/yankrun
+```
+
+</details>
+
+<details>
+<summary><strong>Windows (PowerShell)</strong></summary>
+
+```powershell
+Invoke-WebRequest -Uri https://github.com/AxeForging/yankrun/releases/download/stable/yankrun-windows-amd64.zip -OutFile yankrun-windows-amd64.zip
+Expand-Archive -Path yankrun-windows-amd64.zip -DestinationPath .
+Move-Item -Path yankrun-windows-amd64/yankrun-windows-amd64.exe -Destination yankrun.exe
+```
+
+</details>
+
+### From Source
+<details>
+<summary><strong>Build locally</strong></summary>
+
+```sh
+git clone https://github.com/AxeForging/yankrun.git
+cd yankrun
+go build -o yankrun .
+sudo mv yankrun /usr/local/bin/
+```
+
+Or install with Go:
+
+```sh
+go install github.com/AxeForging/yankrun@latest
+```
+
+</details>
+
+## Usage
+
+<details>
+<summary><strong>Clone & replace (interactive and non-interactive)</strong></summary>
+
+```sh
+# Non-interactive: provide values via --input
+yankrun clone \
+  --repo https://github.com/AxeForging/template-tester.git \
+  --input examples/values.json \
+  --outputDir ./clonedRepo \
+  --verbose
+
+# Interactive: prompt for discovered placeholders after clone
+yankrun clone \
+  --repo git@github.com:AxeForging/template-tester.git \
+  --outputDir ./clonedRepo \
+  --prompt --verbose
+```
+
+What it does:
+- Clones the repository
+- Scans for placeholders between your delimiters (defaults: `[[`, `]]`)
+- If `-p/--prompt` is set, shows a summary and prompts for values; otherwise uses values from `-i` if provided
+- Applies replacements and logs completion
+
+Options:
+- `--repo`: Git URL to clone
+- `--input`: JSON/YAML with variables (used in non-interactive or as defaults in interactive)
+- `--outputDir`: directory to clone into
+- `--fileSizeLimit`: skip files larger than this (default `3 mb`)
+- `--startDelim`: template start delimiter (default `[[`)
+- `--endDelim`: template end delimiter (default `]]`)
+- `--prompt` (alias: `--interactive`): ask for values before applying
+- `--processTemplates` (alias: `--pt`): process `.tpl` files by evaluating templates and removing `.tpl` suffix
+- `--onlyTemplates` (alias: `--ot`): when used with `--processTemplates`, only process `.tpl` files and ignore all other files
+
+</details>
+
+<details>
+<summary><strong>Generate (choose template repo & branch)</strong></summary>
+
+```sh
+# Configure templates in ~/.yankrun/config.yaml
+# templates:
+#   - name: "Go App"
+#     url: "git@github.com:AxeForging/template-tester.git"
+#     description: "Example templates"
+#     default_branch: "main"
+
+# Run interactive generator
+yankrun generate --prompt --verbose
+
+# Non-interactive values file and custom delimiters
+yankrun generate --input examples/values.json --startDelim "[[{" --endDelim "}]]" --fileSizeLimit "5 mb"
+```
+
+What it does:
+- Loads configured templates from `~/.yankrun/config.yaml`
+- Lets you choose a template and branch
+- Clones the selected branch
+- Removes `.git` so you start a fresh repo
+- Scans placeholders, optionally prompts (`-p`), then applies replacements
+
+</details>
+
+<details>
+<summary><strong>Template command (interactive)</strong></summary>
+
+```sh
+# Analyze placeholders and prompt for values
+yankrun template --dir ./examples/project --prompt
+
+# Use defaults or overrides (YAML values)
+yankrun template --dir ./examples/project --input examples/values.yaml --startDelim "[[{" --endDelim "}]]" --fileSizeLimit "5 mb" --prompt --verbose
+```
+
+What it does:
+- Scans `--dir` for placeholders between your delimiters (defaults: `[[`, `]]`).
+- Shows a summary of each placeholder with how many matches were found.
+- Pre-fills values from `-i` if provided; prompts for missing ones.
+- Applies replacements across the directory and prints a completion message.
+
+</details>
+
+<details>
+<summary><strong>Template File Processing</strong></summary>
+
+YankRun can process `.tpl` files by evaluating their template content and removing the `.tpl` suffix. This is useful when you have template files that should be processed and renamed.
+
+```sh
+# Process .tpl files in addition to regular templating
+yankrun template --dir ./project --input values.json --processTemplates --verbose
+
+# Clone and process .tpl files
+yankrun clone --repo https://github.com/user/template.git --input values.yaml --processTemplates
+
+# Process ONLY .tpl files (ignore all other files)
+yankrun template --dir ./project --input values.json --processTemplates --onlyTemplates --verbose
+```
+
+What it does:
+- Finds all files ending with `.tpl` in the target directory (recursively)
+- Evaluates template placeholders in these files using the same replacement logic
+- Creates new files without the `.tpl` suffix containing the processed content
+- Removes the original `.tpl` files
+- Skips `.tpl` files in ignored directories (`.git`, `node_modules`, `vendor`, etc.)
+
+Example:
+- `README.tpl` → `README` (with placeholders replaced)
+- `config.tpl` → `config` (with placeholders replaced)
+- `src/main.tpl` → `src/main` (with placeholders replaced)
+
+The `--processTemplates` flag is optional and defaults to `false` to maintain backward compatibility.
+
+**Note**: The `--onlyTemplates` flag requires `--processTemplates` to be set. When used together, YankRun will skip processing all non-`.tpl` files and only process template files.
+
+</details>
+
+## Configuration
+
+<details>
+<summary><strong>Interactive setup</strong></summary>
+
+```sh
+# Create or update ~/.yankrun/config.yaml
+yankrun setup
+
+# Example session
+Template start delimiter [[]: [[
+Template end delimiter ]]: ]]
+File size limit (e.g. 3 mb) [3 mb]: 3 mb
+```
+
+Flags always override config defaults if provided.
+
+</details>
+
+<details>
+<summary><strong>Show current config</strong></summary>
+
+```sh
+yankrun setup --show
+```
+
+Outputs:
+
+```text
+start_delim: [[
+end_delim: ]]
+file_size_limit: 3 mb
+```
+
+</details>
+
+## Input file format
+
+<details>
+<summary><strong>JSON</strong> (see `examples/values.json` in the tester repo)</summary>
+
+```json
+{
+  "ignore_patterns": ["node_modules", "dist"],
+  "variables": [
+    { "key": "APP_NAME", "value": "TemplateTester" },
+    { "key": "PROJECT_NAME", "value": "DemoProject" },
+    { "key": "USER_NAME", "value": "axebyte" },
+    { "key": "USER_EMAIL", "value": "user@example.com" },
+    { "key": "VERSION", "value": "1.0.0" }
+  ]
+}
+```
+
+Notes:
+- If your keys do not include delimiters, YankRun wraps them using your configured delimiters. For example, with start `[[` and end `]]`, `APP_NAME` becomes `[[APP_NAME]]`.
+- If your keys already include delimiters, they are used as-is.
+
+</details>
+
+<details>
+<summary><strong>YAML</strong> (see `examples/values.yaml` in the tester repo)</summary>
+
+```yaml
+ignore_patterns: [node_modules, dist]
+variables:
+  - key: APP_NAME
+    value: TemplateTester
+  - key: PROJECT_NAME
+    value: DemoProject
+  - key: USER_NAME
+    value: axebyte
+  - key: USER_EMAIL
+    value: user@example.com
+  - key: VERSION
+    value: "1.0.0"
+```
+
+</details>
+
+## Examples
+
+<details>
+<summary><strong>Set custom delimiters per run</strong></summary>
+
+```sh
+yankrun clone --repo git@github.com:AxeForging/template-tester.git --input examples/values.yaml --outputDir out --startDelim "[[{" --endDelim "}]]"
+```
+
+</details>
+
+<details>
+<summary><strong>Skip large files</strong></summary>
+
+```sh
+yankrun clone --repo git@github.com:AxeForging/template-tester.git --input examples/values.json --outputDir out --fileSizeLimit "10 mb"
+```
+
+</details>
+
+<details>
+<summary><strong>Verbose replacement report</strong></summary>
+
+```sh
+yankrun clone --repo <repo> --input example.json --outputDir out --verbose
+```
+
+## Why YankRun? Practical problems it solves
+
+<details>
+<summary><strong>1) Bootstrap a new project from a template</strong></summary>
+
+Problem: You maintain a template repo (CI, lint, base code). You want to create a new project with your org/app names filled in, without carrying over the template’s git history.
+
+Solution:
+
+```sh
+# Choose template + branch, clone, remove .git, scan tokens, fill values
+yankrun generate --prompt --verbose
+```
+
+Outcome: Fresh repo with placeholders (e.g., [[NAME]], [[PROJECT_NAME]]) replaced and no template history.
+
+</details>
+
+<details>
+<summary><strong>2) Rollout org-wide config changes across many files</strong></summary>
+
+Problem: You have dozens of files with tokens for company, team, emails, or versions. Manual search/replace is error-prone.
+
+Solution:
+
+```sh
+# Define values once
+cat > values.json << 'EOF'
+{
+  "variables": [
+    { "key": "COMPANY", "value": "Acme Corp" },
+    { "key": "TEAM", "value": "Platform" },
+    { "key": "VERSION", "value": "2.1.0" }
+  ]
+}
+EOF
+
+# Apply everywhere safely with size limits
+yankrun template --dir . --input values.json --fileSizeLimit "5 mb" --verbose
+```
+
+Outcome: Consistent updates with a per-file replacement report, skipping large/binary files.
+
+</details>
+
+<details>
+<summary><strong>3) Customize a sample app quickly (no prompts)</strong></summary>
+
+Problem: You want a non-interactive pipeline (CI/CD) to stamp out a project with predetermined values.
+
+Solution:
+
+```sh
+yankrun clone \
+  --repo git@github.com:AxeForging/template-tester.git \
+  --input examples/values.json \
+  --outputDir ./my-app \
+  --startDelim "[[{" --endDelim "}]]" \
+  --verbose
+```
+
+Outcome: Fully templated project ready for commit in automated flows.
+
+</details>
+
+
+</details>
+
+## Transformation Functions
+
+YankRun supports transformation functions that can be applied to placeholders to modify their values. For more details, see the [Transformation Functions documentation](doc/functions.md).
