@@ -61,7 +61,7 @@ func TestCloneNonInteractive(t *testing.T) {
 
 	cmd := exec.Command(bin,
 		"clone",
-		"--repo", "https://github.com/brasa-ai/template-tester.git",
+		"--repo", "https://github.com/AxeForging/template-tester.git",
 		"--input", valsPath,
 		"--outputDir", outDir,
 		"--startDelim", "[[",
@@ -115,7 +115,7 @@ func TestTemplateNonInteractive(t *testing.T) {
 	valsPath := writeFile(t, t.TempDir(), "values.yaml", vals)
 	// clone without replacements
 	cmd := exec.Command(bin, "clone",
-		"--repo", "https://github.com/brasa-ai/template-tester.git",
+		"--repo", "https://github.com/AxeForging/template-tester.git",
 		"--input", writeFile(t, t.TempDir(), "empty.yaml", `variables: []`),
 		"--outputDir", work,
 		"--startDelim", "[[", "--endDelim", "]]",
