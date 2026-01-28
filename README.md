@@ -3,34 +3,57 @@
 <div align="center">
   <img src="doc/logo.png" alt="YankRun" width="200">
   <p>
-    <img src="https://img.shields.io/badge/Go-1.22%2B-00ADD8?style=flat-square&logo=go" alt="Go Version">
+    <img src="https://img.shields.io/badge/Go-1.24%2B-00ADD8?style=flat-square&logo=go" alt="Go Version">
     <img src="https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-darkblue?style=flat-square&logo=windows" alt="OS Support">
     <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
   </p>
 </div>
 
-Template smarter: clone repos and replace tokens safely with size limits, custom delimiters, and JSON/YAML inputs.
+**Template smarter**: Clone repos and replace tokens safely with size limits, custom delimiters, and JSON/YAML inputs.
+
+## TL;DR
+
+```sh
+# Install
+curl -L https://github.com/AxeForging/yankrun/releases/latest/download/yankrun-linux-amd64.tar.gz | tar xz
+sudo mv yankrun-linux-amd64 /usr/local/bin/yankrun
+
+# Clone a template and replace placeholders
+yankrun clone --repo https://github.com/AxeForging/template-tester.git \
+  --input values.yaml --outputDir ./my-project --verbose
+
+# Or template an existing directory
+yankrun template --dir ./my-project --input values.yaml --verbose
+```
 
 ## Features
 
--   **Template values replacement** across a directory tree
--   **Git clone** with post-clone templating
--   **Custom delimiters** with smart wrapping
--   **Size-based skipping** (default 3 MB)
--   **Verbose reporting**
--   **JSON/YAML inputs** and ignore patterns
--   **Transformation functions** (`toUpperCase`, `toLowerCase`, `gsub`)
--   **Template file processing** (`.tpl` files processed and renamed)
+- **Template values replacement** across a directory tree
+- **Git clone** with post-clone templating
+- **Custom delimiters** with smart wrapping (default `[[` `]]`)
+- **Size-based skipping** (default 3 MB)
+- **Verbose reporting** with per-file replacement counts
+- **JSON/YAML inputs** and ignore patterns
+- **Transformation functions** (`toUpperCase`, `toLowerCase`, `gsub`)
+- **Template file processing** (`.tpl` files processed and renamed)
+
+## Documentation
+
+| Audience | Link |
+|----------|------|
+| **Users** | [docs/user/README.md](docs/user/README.md) - Installation, usage, examples |
+| **AI Assistants** | [docs/AI/README.md](docs/AI/README.md) - Architecture, testing, common tasks |
+| **Transformations** | [doc/functions.md](doc/functions.md) - Function reference |
+
+---
 
 ## Install
 
-### From Release
 <details>
 <summary><strong>Linux/macOS (AMD64)</strong></summary>
 
 ```sh
-curl -L https://github.com/AxeForging/yankrun/releases/download/stable/yankrun-linux-amd64.tar.gz -o yankrun-linux-amd64.tar.gz
-tar -xvf yankrun-linux-amd64.tar.gz yankrun-linux-amd64
+curl -L https://github.com/AxeForging/yankrun/releases/latest/download/yankrun-linux-amd64.tar.gz | tar xz
 chmod +x yankrun-linux-amd64
 sudo mv yankrun-linux-amd64 /usr/local/bin/yankrun
 ```
@@ -38,46 +61,18 @@ sudo mv yankrun-linux-amd64 /usr/local/bin/yankrun
 </details>
 
 <details>
-<summary><strong>GitHub discovery config</strong></summary>
-
-You can auto-discover template repos from your GitHub user and/or orgs. All fields are optional; using only orgs is fine.
-
-```yaml
-# ~/.yankrun/config.yaml (excerpt)
-github:
-  orgs: ["AxeForging", "your-org"]          # one or more orgs (optional)
-  user: "your-user"                         # your GitHub user (optional)
-  topic: "templates"                        # filter repos by topic (optional)
-  prefix: "template-"                       # filter repos by name prefix (optional)
-  include_private: true                      # include private repos (requires token)
-  token: "GITHUB_TOKEN"                      # optional; for higher rate limits/private
-```
-
-Notes:
-- If nothing is configured yet, `yankrun generate` will ask for user/orgs inline and save them.
-- When both `user` and `orgs` are set, results are merged.
-
-</details>
-
-<details>
-<summary><strong>Reset configuration</strong></summary>
+<summary><strong>Linux/macOS (ARM64 / Apple Silicon)</strong></summary>
 
 ```sh
-yankrun setup --reset
-```
-
-Deletes `~/.yankrun/config.yaml`.
-
-</details>
-
-<details>
-<summary><strong>Linux/macOS (ARM64)</strong></summary>
-
-```sh
-curl -L https://github.com/AxeForging/yankrun/releases/download/stable/yankrun-linux-arm64.tar.gz -o yankrun-linux-arm64.tar.gz
-tar -xvf yankrun-linux-arm64.tar.gz yankrun-linux-arm64
+# Linux ARM64
+curl -L https://github.com/AxeForging/yankrun/releases/latest/download/yankrun-linux-arm64.tar.gz | tar xz
 chmod +x yankrun-linux-arm64
 sudo mv yankrun-linux-arm64 /usr/local/bin/yankrun
+
+# macOS Apple Silicon
+curl -L https://github.com/AxeForging/yankrun/releases/latest/download/yankrun-darwin-arm64.tar.gz | tar xz
+chmod +x yankrun-darwin-arm64
+sudo mv yankrun-darwin-arm64 /usr/local/bin/yankrun
 ```
 
 </details>
@@ -86,16 +81,21 @@ sudo mv yankrun-linux-arm64 /usr/local/bin/yankrun
 <summary><strong>Windows (PowerShell)</strong></summary>
 
 ```powershell
-Invoke-WebRequest -Uri https://github.com/AxeForging/yankrun/releases/download/stable/yankrun-windows-amd64.zip -OutFile yankrun-windows-amd64.zip
-Expand-Archive -Path yankrun-windows-amd64.zip -DestinationPath .
-Move-Item -Path yankrun-windows-amd64/yankrun-windows-amd64.exe -Destination yankrun.exe
+Invoke-WebRequest -Uri https://github.com/AxeForging/yankrun/releases/latest/download/yankrun-windows-amd64.zip -OutFile yankrun.zip
+Expand-Archive -Path yankrun.zip -DestinationPath .
+Move-Item -Path yankrun-windows-amd64.exe -Destination yankrun.exe
 ```
 
 </details>
 
-### From Source
 <details>
-<summary><strong>Build locally</strong></summary>
+<summary><strong>From Source (Go 1.24+)</strong></summary>
+
+```sh
+go install github.com/AxeForging/yankrun@latest
+```
+
+Or build locally:
 
 ```sh
 git clone https://github.com/AxeForging/yankrun.git
@@ -104,308 +104,401 @@ go build -o yankrun .
 sudo mv yankrun /usr/local/bin/
 ```
 
-Or install with Go:
-
-```sh
-go install github.com/AxeForging/yankrun@latest
-```
-
 </details>
 
-## Usage
+---
 
-<details>
-<summary><strong>Clone & replace (interactive and non-interactive)</strong></summary>
+## Quick Start
+
+### 1. Create a values file
+
+```yaml
+# values.yaml
+variables:
+  - key: APP_NAME
+    value: MyAwesomeApp
+  - key: AUTHOR
+    value: Jane Developer
+  - key: VERSION
+    value: 1.0.0
+```
+
+### 2. Clone and template
 
 ```sh
-# Non-interactive: provide values via --input
 yankrun clone \
   --repo https://github.com/AxeForging/template-tester.git \
-  --input examples/values.json \
-  --outputDir ./clonedRepo \
+  --input values.yaml \
+  --outputDir ./my-new-project \
+  --verbose
+```
+
+### 3. Result
+
+All `[[APP_NAME]]`, `[[AUTHOR]]`, `[[VERSION]]` placeholders are replaced with your values.
+
+---
+
+## Commands
+
+<details>
+<summary><strong>clone</strong> - Clone a repo and replace placeholders</summary>
+
+```sh
+# Non-interactive with values file
+yankrun clone \
+  --repo https://github.com/AxeForging/template-tester.git \
+  --input values.yaml \
+  --outputDir ./my-project \
   --verbose
 
-# Interactive: prompt for discovered placeholders after clone
+# Interactive mode - prompts for each placeholder
 yankrun clone \
   --repo git@github.com:AxeForging/template-tester.git \
-  --outputDir ./clonedRepo \
+  --outputDir ./my-project \
   --prompt --verbose
+
+# With custom delimiters
+yankrun clone \
+  --repo https://github.com/example/repo.git \
+  --input values.json \
+  --outputDir ./out \
+  --startDelim "{{" --endDelim "}}"
+
+# Process .tpl files (README.md.tpl → README.md)
+yankrun clone \
+  --repo https://github.com/example/repo.git \
+  --input values.yaml \
+  --outputDir ./out \
+  --processTemplates
 ```
 
-What it does:
-- Clones the repository
-- Scans for placeholders between your delimiters (defaults: `[[`, `]]`)
-- If `-p/--prompt` is set, shows a summary and prompts for values; otherwise uses values from `-i` if provided
-- Applies replacements and logs completion
+**Flags:**
 
-Options:
-- `--repo`: Git URL to clone
-- `--input`: JSON/YAML with variables (used in non-interactive or as defaults in interactive)
-- `--outputDir`: directory to clone into
-- `--fileSizeLimit`: skip files larger than this (default `3 mb`)
-- `--startDelim`: template start delimiter (default `[[`)
-- `--endDelim`: template end delimiter (default `]]`)
-- `--prompt` (alias: `--interactive`): ask for values before applying
-- `--processTemplates` (alias: `--pt`): process `.tpl` files by evaluating templates and removing `.tpl` suffix
-- `--onlyTemplates` (alias: `--ot`): when used with `--processTemplates`, only process `.tpl` files and ignore all other files
+| Flag | Alias | Description | Default |
+|------|-------|-------------|---------|
+| `--repo` | | Git URL (HTTPS or SSH) | required |
+| `--outputDir` | `-o` | Output directory | required |
+| `--input` | `-i` | Values file (JSON/YAML) | - |
+| `--startDelim` | | Start delimiter | `[[` |
+| `--endDelim` | | End delimiter | `]]` |
+| `--fileSizeLimit` | | Skip files larger than | `3 mb` |
+| `--prompt` | `-p` | Interactive mode | `false` |
+| `--processTemplates` | `--pt` | Process `.tpl` files | `false` |
+| `--onlyTemplates` | `--ot` | Only process `.tpl` files | `false` |
+| `--verbose` | `-v` | Verbose output | `false` |
+| `--branch` | `-b` | Branch to clone | default |
 
 </details>
 
 <details>
-<summary><strong>Generate (choose template repo & branch)</strong></summary>
+<summary><strong>template</strong> - Template an existing directory</summary>
 
 ```sh
-# Configure templates in ~/.yankrun/config.yaml
-# templates:
-#   - name: "Go App"
-#     url: "git@github.com:AxeForging/template-tester.git"
-#     description: "Example templates"
-#     default_branch: "main"
+# Basic usage
+yankrun template --dir ./my-project --input values.yaml --verbose
 
-# Run interactive generator
+# Interactive mode
+yankrun template --dir ./my-project --prompt
+
+# With custom delimiters and size limit
+yankrun template \
+  --dir ./my-project \
+  --input values.yaml \
+  --startDelim "{{" --endDelim "}}" \
+  --fileSizeLimit "10 mb" \
+  --verbose
+```
+
+**Flags:**
+
+| Flag | Alias | Description | Default |
+|------|-------|-------------|---------|
+| `--dir` | `-d` | Directory to process | required |
+| `--input` | `-i` | Values file (JSON/YAML) | - |
+| `--startDelim` | | Start delimiter | `[[` |
+| `--endDelim` | | End delimiter | `]]` |
+| `--fileSizeLimit` | | Skip files larger than | `3 mb` |
+| `--prompt` | `-p` | Interactive mode | `false` |
+| `--processTemplates` | `--pt` | Process `.tpl` files | `false` |
+| `--onlyTemplates` | `--ot` | Only process `.tpl` files | `false` |
+| `--verbose` | `-v` | Verbose output | `false` |
+
+</details>
+
+<details>
+<summary><strong>generate</strong> - Interactive template selection</summary>
+
+```sh
+# Interactive - choose template from config
 yankrun generate --prompt --verbose
 
-# Non-interactive values file and custom delimiters
-yankrun generate --input examples/values.json --startDelim "[[{" --endDelim "}]]" --fileSizeLimit "5 mb"
+# Non-interactive with template filter
+yankrun generate --template "go-service" --input values.yaml --outputDir ./new-project
+
+# With branch selection
+yankrun generate --template "api" --branch "feature/v2" --outputDir ./new-api
 ```
 
-What it does:
-- Loads configured templates from `~/.yankrun/config.yaml`
-- Lets you choose a template and branch
-- Clones the selected branch
-- Removes `.git` so you start a fresh repo
-- Scans placeholders, optionally prompts (`-p`), then applies replacements
+Requires templates configured in `~/.yankrun/config.yaml` or GitHub discovery enabled.
 
 </details>
 
 <details>
-<summary><strong>Template command (interactive)</strong></summary>
+<summary><strong>setup</strong> - Configure defaults</summary>
 
 ```sh
-# Analyze placeholders and prompt for values
-yankrun template --dir ./examples/project --prompt
-
-# Use defaults or overrides (YAML values)
-yankrun template --dir ./examples/project --input examples/values.yaml --startDelim "[[{" --endDelim "}]]" --fileSizeLimit "5 mb" --prompt --verbose
-```
-
-What it does:
-- Scans `--dir` for placeholders between your delimiters (defaults: `[[`, `]]`).
-- Shows a summary of each placeholder with how many matches were found.
-- Pre-fills values from `-i` if provided; prompts for missing ones.
-- Applies replacements across the directory and prints a completion message.
-
-</details>
-
-<details>
-<summary><strong>Template File Processing</strong></summary>
-
-YankRun can process `.tpl` files by evaluating their template content and removing the `.tpl` suffix. This is useful when you have template files that should be processed and renamed.
-
-```sh
-# Process .tpl files in addition to regular templating
-yankrun template --dir ./project --input values.json --processTemplates --verbose
-
-# Clone and process .tpl files
-yankrun clone --repo https://github.com/user/template.git --input values.yaml --processTemplates
-
-# Process ONLY .tpl files (ignore all other files)
-yankrun template --dir ./project --input values.json --processTemplates --onlyTemplates --verbose
-```
-
-What it does:
-- Finds all files ending with `.tpl` in the target directory (recursively)
-- Evaluates template placeholders in these files using the same replacement logic
-- Creates new files without the `.tpl` suffix containing the processed content
-- Removes the original `.tpl` files
-- Skips `.tpl` files in ignored directories (`.git`, `node_modules`, `vendor`, etc.)
-
-Example:
-- `README.tpl` → `README` (with placeholders replaced)
-- `config.tpl` → `config` (with placeholders replaced)
-- `src/main.tpl` → `src/main` (with placeholders replaced)
-
-The `--processTemplates` flag is optional and defaults to `false` to maintain backward compatibility.
-
-**Note**: The `--onlyTemplates` flag requires `--processTemplates` to be set. When used together, YankRun will skip processing all non-`.tpl` files and only process template files.
-
-</details>
-
-## Configuration
-
-<details>
-<summary><strong>Interactive setup</strong></summary>
-
-```sh
-# Create or update ~/.yankrun/config.yaml
+# Interactive setup
 yankrun setup
 
-# Example session
-Template start delimiter [[]: [[
-Template end delimiter ]]: ]]
-File size limit (e.g. 3 mb) [3 mb]: 3 mb
-```
-
-Flags always override config defaults if provided.
-
-</details>
-
-<details>
-<summary><strong>Show current config</strong></summary>
-
-```sh
+# Show current config
 yankrun setup --show
+
+# Reset config
+yankrun setup --reset
 ```
 
-Outputs:
+Creates/updates `~/.yankrun/config.yaml`.
 
-```text
-start_delim: [[
-end_delim: ]]
-file_size_limit: 3 mb
+</details>
+
+---
+
+## Values File Format
+
+<details>
+<summary><strong>YAML (recommended)</strong></summary>
+
+```yaml
+# Optional: directories to skip
+ignore_patterns:
+  - node_modules
+  - dist
+  - .git
+  - vendor
+
+# Required: key-value pairs
+variables:
+  - key: APP_NAME
+    value: MyApp
+  - key: PROJECT_NAME
+    value: my-awesome-project
+  - key: AUTHOR_NAME
+    value: Jane Developer
+  - key: AUTHOR_EMAIL
+    value: jane@example.com
+  - key: VERSION
+    value: "1.0.0"
+  - key: YEAR
+    value: "2024"
 ```
 
 </details>
 
-## Input file format
-
 <details>
-<summary><strong>JSON</strong> (see `examples/values.json` in the tester repo)</summary>
+<summary><strong>JSON</strong></summary>
 
 ```json
 {
-  "ignore_patterns": ["node_modules", "dist"],
+  "ignore_patterns": ["node_modules", "dist", ".git"],
   "variables": [
-    { "key": "APP_NAME", "value": "TemplateTester" },
-    { "key": "PROJECT_NAME", "value": "DemoProject" },
-    { "key": "USER_NAME", "value": "axebyte" },
-    { "key": "USER_EMAIL", "value": "user@example.com" },
+    { "key": "APP_NAME", "value": "MyApp" },
+    { "key": "PROJECT_NAME", "value": "my-awesome-project" },
+    { "key": "AUTHOR_NAME", "value": "Jane Developer" },
+    { "key": "AUTHOR_EMAIL", "value": "jane@example.com" },
     { "key": "VERSION", "value": "1.0.0" }
   ]
 }
 ```
 
-Notes:
-- If your keys do not include delimiters, YankRun wraps them using your configured delimiters. For example, with start `[[` and end `]]`, `APP_NAME` becomes `[[APP_NAME]]`.
-- If your keys already include delimiters, they are used as-is.
-
 </details>
 
-<details>
-<summary><strong>YAML</strong> (see `examples/values.yaml` in the tester repo)</summary>
-
-```yaml
-ignore_patterns: [node_modules, dist]
-variables:
-  - key: APP_NAME
-    value: TemplateTester
-  - key: PROJECT_NAME
-    value: DemoProject
-  - key: USER_NAME
-    value: axebyte
-  - key: USER_EMAIL
-    value: user@example.com
-  - key: VERSION
-    value: "1.0.0"
-```
-
-</details>
-
-## Examples
-
-<details>
-<summary><strong>Set custom delimiters per run</strong></summary>
-
-```sh
-yankrun clone --repo git@github.com:AxeForging/template-tester.git --input examples/values.yaml --outputDir out --startDelim "[[{" --endDelim "}]]"
-```
-
-</details>
-
-<details>
-<summary><strong>Skip large files</strong></summary>
-
-```sh
-yankrun clone --repo git@github.com:AxeForging/template-tester.git --input examples/values.json --outputDir out --fileSizeLimit "10 mb"
-```
-
-</details>
-
-<details>
-<summary><strong>Verbose replacement report</strong></summary>
-
-```sh
-yankrun clone --repo <repo> --input example.json --outputDir out --verbose
-```
-
-## Why YankRun? Practical problems it solves
-
-<details>
-<summary><strong>1) Bootstrap a new project from a template</strong></summary>
-
-Problem: You maintain a template repo (CI, lint, base code). You want to create a new project with your org/app names filled in, without carrying over the template’s git history.
-
-Solution:
-
-```sh
-# Choose template + branch, clone, remove .git, scan tokens, fill values
-yankrun generate --prompt --verbose
-```
-
-Outcome: Fresh repo with placeholders (e.g., [[NAME]], [[PROJECT_NAME]]) replaced and no template history.
-
-</details>
-
-<details>
-<summary><strong>2) Rollout org-wide config changes across many files</strong></summary>
-
-Problem: You have dozens of files with tokens for company, team, emails, or versions. Manual search/replace is error-prone.
-
-Solution:
-
-```sh
-# Define values once
-cat > values.json << 'EOF'
-{
-  "variables": [
-    { "key": "COMPANY", "value": "Acme Corp" },
-    { "key": "TEAM", "value": "Platform" },
-    { "key": "VERSION", "value": "2.1.0" }
-  ]
-}
-EOF
-
-# Apply everywhere safely with size limits
-yankrun template --dir . --input values.json --fileSizeLimit "5 mb" --verbose
-```
-
-Outcome: Consistent updates with a per-file replacement report, skipping large/binary files.
-
-</details>
-
-<details>
-<summary><strong>3) Customize a sample app quickly (no prompts)</strong></summary>
-
-Problem: You want a non-interactive pipeline (CI/CD) to stamp out a project with predetermined values.
-
-Solution:
-
-```sh
-yankrun clone \
-  --repo git@github.com:AxeForging/template-tester.git \
-  --input examples/values.json \
-  --outputDir ./my-app \
-  --startDelim "[[{" --endDelim "}]]" \
-  --verbose
-```
-
-Outcome: Fully templated project ready for commit in automated flows.
-
-</details>
-
-
-</details>
+---
 
 ## Transformation Functions
 
-YankRun supports transformation functions that can be applied to placeholders to modify their values. For more details, see the [Transformation Functions documentation](doc/functions.md).
+Apply transformations to placeholder values using the syntax `[[KEY:function]]`:
+
+| Function | Syntax | Input | Output |
+|----------|--------|-------|--------|
+| Uppercase | `[[APP:toUpperCase]]` | `my-app` | `MY-APP` |
+| Lowercase | `[[APP:toLowerCase]]` | `My-App` | `my-app` |
+| Replace | `[[APP:gsub(-,_)]]` | `my-app` | `my_app` |
+| Chain | `[[APP:gsub( ,-):toLowerCase]]` | `My App` | `my-app` |
+
+<details>
+<summary><strong>More examples</strong></summary>
+
+```
+# Template file content
+Package: [[PACKAGE_NAME:toLowerCase]]
+Constant: [[PACKAGE_NAME:toUpperCase]]
+ClassName: [[PACKAGE_NAME:gsub(-,_)]]
+URL-safe: [[PROJECT_NAME:gsub( ,-):toLowerCase]]
+
+# With PACKAGE_NAME=My-Package and PROJECT_NAME=My Project
+Package: my-package
+Constant: MY-PACKAGE
+ClassName: My_Package
+URL-safe: my-project
+```
+
+</details>
+
+See [doc/functions.md](doc/functions.md) for full documentation.
+
+---
+
+## Configuration
+
+<details>
+<summary><strong>Full config example (~/.yankrun/config.yaml)</strong></summary>
+
+```yaml
+# Default delimiters
+start_delim: "[["
+end_delim: "]]"
+
+# Skip files larger than this
+file_size_limit: "3 mb"
+
+# Pre-configured templates for `generate` command
+templates:
+  - name: "Go Microservice"
+    url: "git@github.com:your-org/go-template.git"
+    description: "Production-ready Go service template"
+    default_branch: "main"
+
+  - name: "React App"
+    url: "https://github.com/your-org/react-template.git"
+    description: "React + TypeScript starter"
+    default_branch: "main"
+
+# GitHub auto-discovery for templates
+github:
+  user: "your-username"              # Your GitHub username
+  orgs: ["your-org", "another-org"]  # Organizations to search
+  topic: "template"                  # Filter by topic
+  prefix: "template-"                # Filter by name prefix
+  include_private: true              # Include private repos
+  token: "ghp_xxxx"                  # Optional: for private repos
+```
+
+</details>
+
+---
+
+## Use Cases
+
+<details>
+<summary><strong>Bootstrap a new project from a template</strong></summary>
+
+**Problem:** You maintain a template repo with CI, linting, and base code. You want to create a new project with your names filled in, without the template's git history.
+
+**Solution:**
+
+```sh
+yankrun generate --prompt --verbose
+```
+
+Or non-interactively:
+
+```sh
+cat > values.yaml << 'EOF'
+variables:
+  - key: PROJECT_NAME
+    value: my-new-service
+  - key: AUTHOR
+    value: Platform Team
+EOF
+
+yankrun clone \
+  --repo git@github.com:your-org/service-template.git \
+  --input values.yaml \
+  --outputDir ./my-new-service \
+  --verbose
+```
+
+**Result:** Fresh project with all placeholders replaced, no template git history.
+
+</details>
+
+<details>
+<summary><strong>Batch update config across many files</strong></summary>
+
+**Problem:** You need to update company name, version, or email across dozens of files.
+
+**Solution:**
+
+```sh
+cat > updates.yaml << 'EOF'
+variables:
+  - key: COMPANY_NAME
+    value: "New Company Inc"
+  - key: SUPPORT_EMAIL
+    value: "support@newcompany.com"
+  - key: VERSION
+    value: "2.0.0"
+EOF
+
+yankrun template --dir . --input updates.yaml --verbose
+```
+
+**Result:** Consistent updates across all files with a detailed report.
+
+</details>
+
+<details>
+<summary><strong>CI/CD pipeline templating</strong></summary>
+
+**Problem:** You need to stamp out projects in an automated pipeline with no user interaction.
+
+**Solution:**
+
+```sh
+# In your CI script
+yankrun clone \
+  --repo "$TEMPLATE_REPO" \
+  --input /config/values.json \
+  --outputDir ./output \
+  --startDelim "{{" --endDelim "}}" \
+  --processTemplates \
+  --verbose
+```
+
+**Result:** Fully templated project ready for deployment, no prompts.
+
+</details>
+
+<details>
+<summary><strong>Process .tpl template files</strong></summary>
+
+**Problem:** You have `Dockerfile.tpl`, `config.yaml.tpl` files that should be processed and renamed.
+
+**Solution:**
+
+```sh
+yankrun template --dir ./project --input values.yaml --processTemplates --verbose
+```
+
+**Result:**
+- `Dockerfile.tpl` → `Dockerfile` (with placeholders replaced)
+- `config.yaml.tpl` → `config.yaml` (with placeholders replaced)
+- Original `.tpl` files are removed
+
+</details>
+
+---
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Error (invalid flags, clone failed, etc.) |
+
+---
+
+## License
+
+MIT - see [LICENSE](LICENSE)
