@@ -75,3 +75,13 @@ var onlyTemplatesFlag = cli.BoolFlag{
 	Name:  "onlyTemplates, ot",
 	Usage: "When used with --processTemplates, only process .tpl files and ignore all other files",
 }
+
+var dryRunFlag = cli.BoolFlag{
+	Name:  "dryRun, dr",
+	Usage: "Preview what would be changed without writing any files",
+}
+
+var ignoreFlag = cli.StringSliceFlag{
+	Name:  "ignore",
+	Usage: "Glob patterns for files/directories to skip (e.g. --ignore '*.generated.*' --ignore 'migrations/*')",
+}
