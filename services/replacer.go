@@ -11,39 +11,57 @@ import (
 	"unicode/utf8"
 
 	"github.com/AxeForging/yankrun/domain"
+	"github.com/AxeForging/yankrun/helpers"
 )
 
 type Replacer interface {
-	ReplaceInDir(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool) error
-	AnalyzeDir(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool) (map[string]int, error)
-	ProcessTemplateFiles(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool) error
+	ReplaceInDir(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error
+	AnalyzeDir(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) (map[string]int, error)
+	ProcessTemplateFiles(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error
 }
 
 type FileReplacer struct {
 	FileSystem FileSystem
 }
 
-func (fr *FileReplacer) ReplaceInDir(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool) error {
+// shouldIgnore checks whether the given path (relative to the base directory) matches any of the ignore patterns.
+func shouldIgnore(basePath, fullPath string, ignorePatterns []string) bool {
+	rel, err := filepath.Rel(basePath, fullPath)
+	if err != nil {
+		return false
+	}
+	for _, pattern := range ignorePatterns {
+		if matched, _ := filepath.Match(pattern, rel); matched {
+			return true
+		}
+		if matched, _ := filepath.Match(pattern, filepath.Base(fullPath)); matched {
+			return true
+		}
+	}
+	return false
+}
+
+func (fr *FileReplacer) ReplaceInDir(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error {
 	fileSizeInBytes, err := fr.stringToBytes(fileSizeLimit)
 	if err != nil {
 		return err
 	}
 
-	return fr.replacePatterns(dir, replacements, fileSizeInBytes, startDelim, endDelim, verbose)
+	return fr.replacePatterns(dir, dir, replacements, fileSizeInBytes, startDelim, endDelim, verbose, ignorePatterns)
 }
 
 // AnalyzeDir returns a map of placeholder -> count discovered in files within size limit
-func (fr *FileReplacer) AnalyzeDir(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool) (map[string]int, error) {
+func (fr *FileReplacer) AnalyzeDir(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) (map[string]int, error) {
 	result := map[string]int{}
 	fileSizeInBytes, err := fr.stringToBytes(fileSizeLimit)
 	if err != nil {
 		return result, err
 	}
-	err = fr.walkAndAnalyze(dir, fileSizeInBytes, startDelim, endDelim, result, onlyTemplates)
+	err = fr.walkAndAnalyze(dir, dir, fileSizeInBytes, startDelim, endDelim, result, onlyTemplates, ignorePatterns)
 	return result, err
 }
 
-func (fr *FileReplacer) walkAndAnalyze(dir string, fileSizeInBytes int64, startDelim string, endDelim string, result map[string]int, onlyTemplates bool) error {
+func (fr *FileReplacer) walkAndAnalyze(dir string, basePath string, fileSizeInBytes int64, startDelim string, endDelim string, result map[string]int, onlyTemplates bool, ignorePatterns []string) error {
 	files, err := fr.FileSystem.ReadDir(dir)
 	if err != nil {
 		return err
@@ -60,9 +78,16 @@ func (fr *FileReplacer) walkAndAnalyze(dir string, fileSizeInBytes int64, startD
 			case ".git", "node_modules", "vendor", "dist", "build", "bin":
 				continue
 			}
-			if err := fr.walkAndAnalyze(path, fileSizeInBytes, startDelim, endDelim, result, onlyTemplates); err != nil {
+			if shouldIgnore(basePath, path, ignorePatterns) {
+				continue
+			}
+			if err := fr.walkAndAnalyze(path, basePath, fileSizeInBytes, startDelim, endDelim, result, onlyTemplates, ignorePatterns); err != nil {
 				return err
 			}
+			continue
+		}
+
+		if shouldIgnore(basePath, path, ignorePatterns) {
 			continue
 		}
 
@@ -96,7 +121,7 @@ func (fr *FileReplacer) walkAndAnalyze(dir string, fileSizeInBytes int64, startD
 			baseKey, _, err := fr.parsePlaceholder(keyWithTransforms)
 			if err != nil {
 				// Log error but continue processing other placeholders
-				fmt.Printf("Error parsing placeholder '%s': %v\n", keyWithTransforms, err)
+				helpers.Log.Warn().Err(err).Msgf("Skipping invalid placeholder '%s'", keyWithTransforms)
 				text = text[end+len(endDelim):]
 				continue
 			}
@@ -108,16 +133,16 @@ func (fr *FileReplacer) walkAndAnalyze(dir string, fileSizeInBytes int64, startD
 }
 
 // ProcessTemplateFiles processes .tpl files by evaluating templates and removing .tpl suffix
-func (fr *FileReplacer) ProcessTemplateFiles(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool) error {
+func (fr *FileReplacer) ProcessTemplateFiles(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error {
 	fileSizeInBytes, err := fr.stringToBytes(fileSizeLimit)
 	if err != nil {
 		return err
 	}
 
-	return fr.processTemplateFilesRecursive(dir, replacements, fileSizeInBytes, startDelim, endDelim, verbose)
+	return fr.processTemplateFilesRecursive(dir, dir, replacements, fileSizeInBytes, startDelim, endDelim, verbose, ignorePatterns)
 }
 
-func (fr *FileReplacer) processTemplateFilesRecursive(dir string, replacements domain.InputReplacement, fileSizeInBytes int64, startDelim string, endDelim string, verbose bool) error {
+func (fr *FileReplacer) processTemplateFilesRecursive(dir string, basePath string, replacements domain.InputReplacement, fileSizeInBytes int64, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error {
 	files, err := fr.FileSystem.ReadDir(dir)
 	if err != nil {
 		return err
@@ -136,10 +161,17 @@ func (fr *FileReplacer) processTemplateFilesRecursive(dir string, replacements d
 			case ".git", "node_modules", "vendor", "dist", "build", "bin":
 				continue
 			}
-			err := fr.processTemplateFilesRecursive(path, replacements, fileSizeInBytes, startDelim, endDelim, verbose)
+			if shouldIgnore(basePath, path, ignorePatterns) {
+				continue
+			}
+			err := fr.processTemplateFilesRecursive(path, basePath, replacements, fileSizeInBytes, startDelim, endDelim, verbose, ignorePatterns)
 			if err != nil {
 				return err
 			}
+			continue
+		}
+
+		if shouldIgnore(basePath, path, ignorePatterns) {
 			continue
 		}
 
@@ -187,7 +219,7 @@ func (fr *FileReplacer) processTemplateFilesRecursive(dir string, replacements d
 			baseKey, transformations, err := fr.parsePlaceholder(placeholderWithTransforms)
 			if err != nil {
 				if verbose {
-					fmt.Printf("Error parsing placeholder '%s': %v\n", placeholderWithTransforms, err)
+					helpers.Log.Warn().Err(err).Msgf("Skipping invalid placeholder '%s'", placeholderWithTransforms)
 				}
 				continue
 			}
@@ -203,7 +235,7 @@ func (fr *FileReplacer) processTemplateFilesRecursive(dir string, replacements d
 			finalValue, err := fr.applyTransformations(baseValue, transformations)
 			if err != nil {
 				if verbose {
-					fmt.Printf("Error applying transformations for '%s': %v\n", placeholderWithTransforms, err)
+					helpers.Log.Warn().Err(err).Msgf("Skipping transformation for '%s'", placeholderWithTransforms)
 				}
 				continue
 			}
@@ -229,7 +261,7 @@ func (fr *FileReplacer) processTemplateFilesRecursive(dir string, replacements d
 		}
 
 		if verbose && numReplacements != 0 {
-			fmt.Printf("Processed template %s -> %s (%d replacements)\n", file.Name(), fr.FileSystem.Base(newPath), numReplacements)
+			helpers.Log.Debug().Msgf("Processed template %s -> %s (%d replacements)", file.Name(), fr.FileSystem.Base(newPath), numReplacements)
 		}
 	}
 
@@ -252,7 +284,7 @@ func (fr *FileReplacer) parsePlaceholder(placeholder string) (string, []string, 
 	return baseKey, transformations, nil
 }
 
-func (fr *FileReplacer) replacePatterns(dir string, replacements domain.InputReplacement, fileSizeInBytes int64, startDelim string, endDelim string, verbose bool) error {
+func (fr *FileReplacer) replacePatterns(dir string, basePath string, replacements domain.InputReplacement, fileSizeInBytes int64, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error {
 	files, err := fr.FileSystem.ReadDir(dir)
 	if err != nil {
 		return err
@@ -271,10 +303,17 @@ func (fr *FileReplacer) replacePatterns(dir string, replacements domain.InputRep
 			case ".git", "node_modules", "vendor", "dist", "build", "bin":
 				continue
 			}
-			err := fr.replacePatterns(path, replacements, fileSizeInBytes, startDelim, endDelim, verbose)
+			if shouldIgnore(basePath, path, ignorePatterns) {
+				continue
+			}
+			err := fr.replacePatterns(path, basePath, replacements, fileSizeInBytes, startDelim, endDelim, verbose, ignorePatterns)
 			if err != nil {
 				return err
 			}
+			continue
+		}
+
+		if shouldIgnore(basePath, path, ignorePatterns) {
 			continue
 		}
 
@@ -316,7 +355,7 @@ func (fr *FileReplacer) replacePatterns(dir string, replacements domain.InputRep
 
 			baseKey, transformations, err := fr.parsePlaceholder(placeholderWithTransforms)
 			if err != nil {
-				fmt.Printf("Error parsing placeholder '%s': %v\n", placeholderWithTransforms, err)
+				helpers.Log.Warn().Err(err).Msgf("Skipping invalid placeholder '%s'", placeholderWithTransforms)
 				continue
 			}
 
@@ -330,7 +369,7 @@ func (fr *FileReplacer) replacePatterns(dir string, replacements domain.InputRep
 			// Apply transformations
 			finalValue, err := fr.applyTransformations(baseValue, transformations)
 			if err != nil {
-				fmt.Printf("Error applying transformations for '%s': %v\n", placeholderWithTransforms, err)
+				helpers.Log.Warn().Err(err).Msgf("Skipping transformation for '%s'", placeholderWithTransforms)
 				continue
 			}
 
@@ -345,7 +384,7 @@ func (fr *FileReplacer) replacePatterns(dir string, replacements domain.InputRep
 		}
 
 		if verbose && numReplacements != 0 {
-			fmt.Printf("Replaced %d instances in %s\n", numReplacements, file.Name())
+			helpers.Log.Debug().Msgf("Replaced %d instances in %s", numReplacements, file.Name())
 		}
 	}
 
@@ -500,7 +539,7 @@ func (fr *FileReplacer) checkFileSize(fileInfo interface {
 }, fileSizeLimit int64, verbose bool) bool {
 	if fileInfo.Size() > fileSizeLimit {
 		if verbose {
-			fmt.Printf("Skipping file %s because its size (%d) exceeds the limit (%d)\n", fileInfo.Name(), fileInfo.Size(), fileSizeLimit)
+			helpers.Log.Debug().Msgf("Skipping file %s (size %d exceeds limit %d)", fileInfo.Name(), fileInfo.Size(), fileSizeLimit)
 		}
 		return false
 	}

@@ -40,6 +40,8 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 	branchFlag := c.String("branch")
 	processTemplates := c.Bool("processTemplates")
 	onlyTemplates := c.Bool("onlyTemplates")
+	dryRun := c.Bool("dryRun")
+	ignoreFlags := c.StringSlice("ignore")
 
 	// Validate flag combination
 	if onlyTemplates && !processTemplates {
@@ -68,8 +70,6 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		cfg.GitHub.Orgs = orgs
 		_ = services.Save(cfg)
 	}
-
-	// flags already parsed above
 
 	// Fill defaults from config
 	if startDelim == "" && cfg.StartDelim != "" {
@@ -101,7 +101,10 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 	}
 	if cfg.GitHub.User != "" || len(cfg.GitHub.Orgs) > 0 {
 		ghClient := services.NewGitHubClient()
-		found, _ := ghClient.ListRepos(context.Background(), cfg.GitHub)
+		found, err := ghClient.ListRepos(context.Background(), cfg.GitHub)
+		if err != nil {
+			helpers.Log.Warn().Err(err).Msg("Failed to discover GitHub repos")
+		}
 		for _, fr := range found {
 			repos = append(repos, domain.TemplateRepo{
 				Name: fr.FullName, URL: fr.SSHURL, Description: fr.Description, DefaultBranch: fr.DefaultBranch,
@@ -251,8 +254,11 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		}
 	}
 
+	// Merge ignore patterns from flags and input file
+	ignorePatterns := append(ignoreFlags, provided.IgnorePath...)
+
 	// Analyze placeholders
-	counts, err := a.replacer.AnalyzeDir(outputDir, fileSizeLimit, startDelim, endDelim, onlyTemplates)
+	counts, err := a.replacer.AnalyzeDir(outputDir, fileSizeLimit, startDelim, endDelim, onlyTemplates, ignorePatterns)
 	if err != nil {
 		return err
 	}
@@ -309,22 +315,32 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		return nil
 	}
 
+	// Dry-run: show summary and exit without writing
+	if dryRun {
+		totalMatches := 0
+		for _, c := range counts {
+			totalMatches += c
+		}
+		helpers.Log.Info().Msgf("Dry run: %d replacements across %d placeholders would be applied. No files modified.", totalMatches, len(final.Variables))
+		return nil
+	}
+
 	// Skip regular templating if onlyTemplates is set
 	if !onlyTemplates {
-		if err := a.replacer.ReplaceInDir(outputDir, final, fileSizeLimit, startDelim, endDelim, verbose); err != nil {
+		if err := a.replacer.ReplaceInDir(outputDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
 			return err
 		}
 	}
 
 	// Process .tpl files if requested
 	if processTemplates {
-		if err := a.replacer.ProcessTemplateFiles(outputDir, final, fileSizeLimit, startDelim, endDelim, verbose); err != nil {
+		if err := a.replacer.ProcessTemplateFiles(outputDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
 			return err
 		}
-		helpers.Log.Info().Msg("Template file processing complete ✔")
+		helpers.Log.Info().Msg("Template file processing complete.")
 	}
 
-	helpers.Log.Info().Msg("Templating complete ✔")
+	helpers.Log.Info().Msg("Templating complete.")
 	return nil
 }
 

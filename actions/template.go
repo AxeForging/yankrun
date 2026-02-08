@@ -34,6 +34,8 @@ func (t *TemplateAction) Execute(c *cli.Context) error {
 	fileSizeLimit := c.String("fileSizeLimit")
 	processTemplates := c.Bool("processTemplates")
 	onlyTemplates := c.Bool("onlyTemplates")
+	dryRun := c.Bool("dryRun")
+	ignoreFlags := c.StringSlice("ignore")
 
 	if dir == "" {
 		return fmt.Errorf("--dir is required for template command")
@@ -77,8 +79,11 @@ func (t *TemplateAction) Execute(c *cli.Context) error {
 		}
 	}
 
+	// Merge ignore patterns from flags and input file
+	ignorePatterns := append(ignoreFlags, parsed.IgnorePath...)
+
 	// Analyze placeholders in dir
-	counts, err := t.replacer.AnalyzeDir(dir, fileSizeLimit, startDelim, endDelim, onlyTemplates)
+	counts, err := t.replacer.AnalyzeDir(dir, fileSizeLimit, startDelim, endDelim, onlyTemplates, ignorePatterns)
 	if err != nil {
 		return err
 	}
@@ -136,21 +141,33 @@ func (t *TemplateAction) Execute(c *cli.Context) error {
 		return nil
 	}
 
+	// Dry-run: show summary and exit without writing
+	if dryRun {
+		totalMatches := 0
+		for _, k := range keys {
+			if _, ok := values[k]; ok {
+				totalMatches += counts[k]
+			}
+		}
+		helpers.Log.Info().Msgf("Dry run: %d replacements across %d placeholders would be applied. No files modified.", totalMatches, len(final.Variables))
+		return nil
+	}
+
 	// Skip regular templating if onlyTemplates is set
 	if !onlyTemplates {
-		if err := t.replacer.ReplaceInDir(dir, final, fileSizeLimit, startDelim, endDelim, verbose); err != nil {
+		if err := t.replacer.ReplaceInDir(dir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
 			return err
 		}
 	}
 
 	// Process .tpl files if requested
 	if processTemplates {
-		if err := t.replacer.ProcessTemplateFiles(dir, final, fileSizeLimit, startDelim, endDelim, verbose); err != nil {
+		if err := t.replacer.ProcessTemplateFiles(dir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
 			return err
 		}
-		helpers.Log.Info().Msg("Template file processing complete ✔")
+		helpers.Log.Info().Msg("Template file processing complete.")
 	}
 
-	helpers.Log.Info().Msg("Templating complete ✔")
+	helpers.Log.Info().Msg("Templating complete.")
 	return nil
 }

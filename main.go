@@ -46,20 +46,20 @@ func main() {
 			Name:    "template",
 			Aliases: []string{"t"},
 			Usage:   "Template values",
-			Flags:   []cli.Flag{inputFlag, dirFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, interactiveFlag, processTemplatesFlag, onlyTemplatesFlag},
+			Flags:   []cli.Flag{inputFlag, dirFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, interactiveFlag, processTemplatesFlag, onlyTemplatesFlag, dryRunFlag, ignoreFlag},
 			Action:  templateAction.Execute,
 		},
 		{
 			Name:    "clone",
 			Aliases: []string{"r"},
 			Usage:   "Clone a repo with template file replacements",
-			Flags:   []cli.Flag{repoFlag, inputFlag, outputDirFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, interactiveFlag, branchFlag, processTemplatesFlag, onlyTemplatesFlag},
+			Flags:   []cli.Flag{repoFlag, inputFlag, outputDirFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, interactiveFlag, branchFlag, processTemplatesFlag, onlyTemplatesFlag, dryRunFlag, ignoreFlag},
 			Action:  cloneAction.Execute,
 		},
 		{
 			Name:   "generate",
 			Usage:  "Interactively choose a template repo/branch and clone it as a new repo (removes .git)",
-			Flags:  []cli.Flag{inputFlag, outputDirFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, interactiveFlag, templateNameFlag, branchFlag, processTemplatesFlag, onlyTemplatesFlag},
+			Flags:  []cli.Flag{inputFlag, outputDirFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, interactiveFlag, templateNameFlag, branchFlag, processTemplatesFlag, onlyTemplatesFlag, dryRunFlag, ignoreFlag},
 			Action: generateAction.Execute,
 		},
 		{

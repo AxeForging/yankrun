@@ -63,13 +63,21 @@ func (c *GitHubClient) ListRepos(ctx context.Context, gh domain.GitHubConfig) ([
         return nil
     }
 
+    var lastErr error
     if gh.User != "" {
         vis := "public"
         if gh.IncludePrivate { vis = "all" }
-        _ = fetch(fmt.Sprintf("https://api.github.com/users/%s/repos?per_page=100&visibility=%s", gh.User, vis))
+        if err := fetch(fmt.Sprintf("https://api.github.com/users/%s/repos?per_page=100&visibility=%s", gh.User, vis)); err != nil {
+            lastErr = fmt.Errorf("failed to list repos for user %s: %w", gh.User, err)
+        }
     }
     for _, org := range gh.Orgs {
-        _ = fetch(fmt.Sprintf("https://api.github.com/orgs/%s/repos?per_page=100&type=all", org))
+        if err := fetch(fmt.Sprintf("https://api.github.com/orgs/%s/repos?per_page=100&type=all", org)); err != nil {
+            lastErr = fmt.Errorf("failed to list repos for org %s: %w", org, err)
+        }
+    }
+    if len(repos) == 0 && lastErr != nil {
+        return repos, lastErr
     }
     return repos, nil
 }
