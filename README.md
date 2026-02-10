@@ -1,7 +1,7 @@
 # YankRun
 
 <div align="center">
-  <img src="doc/logo.png" alt="YankRun" width="200">
+  <img src="doc/banner.png" alt="YankRun" width="400">
   <p>
     <img src="https://img.shields.io/badge/Go-1.24%2B-00ADD8?style=flat-square&logo=go" alt="Go Version">
     <img src="https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-darkblue?style=flat-square&logo=windows" alt="OS Support">
