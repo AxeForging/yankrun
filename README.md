@@ -36,6 +36,7 @@ yankrun template --dir ./my-project --input values.yaml --verbose
 - **JSON/YAML inputs** and ignore patterns
 - **Transformation functions** (`toUpperCase`, `toLowerCase`, `gsub`)
 - **Template file processing** (`.tpl` files processed and renamed)
+- **Caching** for `generate` - caches GitHub repos and template variables in `~/.yankrun/cache.yaml`
 
 ## Documentation
 
@@ -236,11 +237,17 @@ yankrun generate --prompt --verbose
 # Non-interactive with template filter
 yankrun generate --template "go-service" --input values.yaml --outputDir ./new-project
 
-# With branch selection
-yankrun generate --template "api" --branch "feature/v2" --outputDir ./new-api
+# Dry run uses cache to show placeholders without cloning
+yankrun generate --template "go-service" --dryRun
+
+# Force fresh data (skip cache)
+yankrun generate --template "go-service" --noCache --outputDir ./new-project
 ```
 
 Requires templates configured in `~/.yankrun/config.yaml` or GitHub discovery enabled.
+
+The `generate` command caches GitHub-discovered repos and template variables in `~/.yankrun/cache.yaml`. Subsequent dry runs use cached data to avoid re-cloning. Use `--noCache` to bypass.
+
 
 </details>
 

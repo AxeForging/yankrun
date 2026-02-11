@@ -42,6 +42,7 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 	onlyTemplates := c.Bool("onlyTemplates")
 	dryRun := c.Bool("dryRun")
 	ignoreFlags := c.StringSlice("ignore")
+	noCache := c.Bool("noCache")
 
 	// Validate flag combination
 	if onlyTemplates && !processTemplates {
@@ -91,6 +92,10 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		fileSizeLimit = "3 mb"
 	}
 
+	// Load cache
+	cache, _ := services.LoadCache()
+	cacheUpdated := false
+
 	r := bufio.NewReader(os.Stdin)
 
 	// Aggregate configured repos + discovered GitHub repos
@@ -100,15 +105,27 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		repos = append(repos, domain.TemplateRepo{Name: templateFilter, URL: templateFilter, DefaultBranch: "main"})
 	}
 	if cfg.GitHub.User != "" || len(cfg.GitHub.Orgs) > 0 {
-		ghClient := services.NewGitHubClient()
-		found, err := ghClient.ListRepos(context.Background(), cfg.GitHub)
-		if err != nil {
-			helpers.Log.Warn().Err(err).Msg("Failed to discover GitHub repos")
-		}
-		for _, fr := range found {
-			repos = append(repos, domain.TemplateRepo{
-				Name: fr.FullName, URL: fr.SSHURL, Description: fr.Description, DefaultBranch: fr.DefaultBranch,
-			})
+		configSHA := services.GitHubConfigSHA(cfg.GitHub)
+		if !noCache && configSHA == cache.GitHubConfigSHA && len(cache.GitHubRepos) > 0 {
+			repos = append(repos, cache.GitHubRepos...)
+			helpers.Log.Debug().Msg("Using cached GitHub repos")
+		} else {
+			ghClient := services.NewGitHubClient()
+			found, err := ghClient.ListRepos(context.Background(), cfg.GitHub)
+			if err != nil {
+				helpers.Log.Warn().Err(err).Msg("Failed to discover GitHub repos")
+			}
+			var ghRepos []domain.TemplateRepo
+			for _, fr := range found {
+				tr := domain.TemplateRepo{
+					Name: fr.FullName, URL: fr.SSHURL, Description: fr.Description, DefaultBranch: fr.DefaultBranch,
+				}
+				repos = append(repos, tr)
+				ghRepos = append(ghRepos, tr)
+			}
+			cache.GitHubConfigSHA = configSHA
+			cache.GitHubRepos = ghRepos
+			cacheUpdated = true
 		}
 	}
 	if len(repos) == 0 {
@@ -219,6 +236,45 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		}
 	}
 
+	// Dry-run with cache: show cached variables without cloning
+	if dryRun && !noCache {
+		if cached, ok := services.LookupVars(cache, chosen.URL, br); ok {
+			var provided domain.InputReplacement
+			if input != "" {
+				provided, _ = a.parser.Parse(input)
+			}
+			values := map[string]string{}
+			for _, rpl := range provided.Variables {
+				values[rpl.Key] = rpl.Value
+			}
+
+			helpers.Log.Info().Msgf("Using cached template data (SHA: %s)", cached.SHA)
+			helpers.Log.Info().Msg("Discovered placeholders:")
+			keys := make([]string, 0, len(cached.Variables))
+			for k := range cached.Variables {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				v := values[k]
+				if v == "" {
+					v = "(unset)"
+				}
+				fmt.Printf("  %-24s  matches=%-6d  value=%s\n", k, cached.Variables[k], v)
+			}
+
+			totalMatches := 0
+			for _, c := range cached.Variables {
+				totalMatches += c
+			}
+			helpers.Log.Info().Msgf("Dry run (cached): %d placeholders with %d total matches. No files modified.", len(cached.Variables), totalMatches)
+			if cacheUpdated {
+				_ = services.SaveCache(cache)
+			}
+			return nil
+		}
+	}
+
 	if outputDir == "" {
 		fmt.Printf("Output directory [./new-project]: ")
 		out, _ := r.ReadString('\n')
@@ -237,6 +293,9 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		return err
 	}
 	helpers.Log.Info().Msgf("Cloned %s@%s into %s", chosen.Name, br, outputDir)
+
+	// Get HEAD SHA before removing .git for cache
+	headSHA, _ := services.HeadSHA(outputDir)
 
 	// Remove .git directory to make it a fresh repo
 	gitDir := filepath.Join(outputDir, ".git")
@@ -262,8 +321,18 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// Update cache with discovered variables
+	if headSHA != "" && len(counts) > 0 {
+		services.UpdateVars(cache, chosen.URL, br, headSHA, counts)
+		cacheUpdated = true
+	}
+
 	if len(counts) == 0 {
 		helpers.Log.Info().Msg("No placeholders found.")
+		if cacheUpdated {
+			_ = services.SaveCache(cache)
+		}
 		return nil
 	}
 
@@ -312,6 +381,9 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 
 	if len(final.Variables) == 0 {
 		helpers.Log.Info().Msg("No values provided; nothing to replace.")
+		if cacheUpdated {
+			_ = services.SaveCache(cache)
+		}
 		return nil
 	}
 
@@ -322,6 +394,9 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 			totalMatches += c
 		}
 		helpers.Log.Info().Msgf("Dry run: %d replacements across %d placeholders would be applied. No files modified.", totalMatches, len(final.Variables))
+		if cacheUpdated {
+			_ = services.SaveCache(cache)
+		}
 		return nil
 	}
 
@@ -341,6 +416,9 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 	}
 
 	helpers.Log.Info().Msg("Templating complete.")
+	if cacheUpdated {
+		_ = services.SaveCache(cache)
+	}
 	return nil
 }
 

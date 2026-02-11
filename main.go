@@ -59,7 +59,7 @@ func main() {
 		{
 			Name:   "generate",
 			Usage:  "Interactively choose a template repo/branch and clone it as a new repo (removes .git)",
-			Flags:  []cli.Flag{inputFlag, outputDirFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, interactiveFlag, templateNameFlag, branchFlag, processTemplatesFlag, onlyTemplatesFlag, dryRunFlag, ignoreFlag},
+			Flags:  []cli.Flag{inputFlag, outputDirFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, interactiveFlag, templateNameFlag, branchFlag, processTemplatesFlag, onlyTemplatesFlag, dryRunFlag, ignoreFlag, noCacheFlag},
 			Action: generateAction.Execute,
 		},
 		{

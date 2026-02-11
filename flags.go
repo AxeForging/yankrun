@@ -85,3 +85,8 @@ var ignoreFlag = cli.StringSliceFlag{
 	Name:  "ignore",
 	Usage: "Glob patterns for files/directories to skip (e.g. --ignore '*.generated.*' --ignore 'migrations/*')",
 }
+
+var noCacheFlag = cli.BoolFlag{
+	Name:  "noCache, nc",
+	Usage: "Bypass cache and fetch fresh data from remote",
+}

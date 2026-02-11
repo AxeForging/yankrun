@@ -263,6 +263,7 @@ yankrun generate [options]
 | `--input` | `-i` | Values file path | - |
 | `--prompt` | `-p` | Interactive mode | `false` |
 | `--verbose` | `-v` | Show detailed output | `false` |
+| `--noCache` | `--nc` | Bypass cache, fetch fresh data | `false` |
 
 </details>
 
@@ -276,6 +277,12 @@ yankrun generate --prompt --verbose
 # Filter templates and auto-select
 yankrun generate --template "go-service" --outputDir ./new-service
 
+# Dry run - shows cached placeholders without cloning
+yankrun generate --template "go-service" --dryRun
+
+# Force fresh data (skip cache)
+yankrun generate --template "go-service" --noCache --outputDir ./new-service
+
 # Non-interactive with values
 yankrun generate \
   --template "api-template" \
@@ -285,6 +292,8 @@ yankrun generate \
 ```
 
 </details>
+
+**Caching:** The `generate` command caches GitHub-discovered repos and template variables in `~/.yankrun/cache.yaml`. Dry runs use cached data when available, avoiding re-cloning. Use `--noCache` to force fresh data.
 
 ---
 
