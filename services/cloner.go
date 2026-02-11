@@ -115,6 +115,19 @@ func (gc *GitCloner) ListRemoteBranches(repoURL string) ([]string, error) {
     return branches, nil
 }
 
+// HeadSHA returns the HEAD commit SHA from a local git repository
+func HeadSHA(repoPath string) (string, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return "", err
+	}
+	ref, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+	return ref.Hash().String(), nil
+}
+
 func (gc *GitCloner) isSSH(repoURL string) bool {
 	return strings.HasPrefix(repoURL, "git@") || strings.HasPrefix(repoURL, "ssh://")
 }
