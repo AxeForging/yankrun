@@ -16,12 +16,14 @@ import (
 
 type Cloner interface {
 	CloneRepository(repoURL, outputDir string) error
-    CloneRepositoryBranch(repoURL, branch, outputDir string) error
-    ListRemoteBranches(repoURL string) ([]string, error)
+	CloneRepositoryBranch(repoURL, branch, outputDir string) error
+	ListRemoteBranches(repoURL string) ([]string, error)
+	SetSSHKeyPath(path string)
 }
 
 type GitCloner struct {
 	FileSystem FileSystem
+	SSHKeyPath string // optional override; auto-detected if empty
 }
 
 func (gc *GitCloner) CloneRepository(repoURL, outputDir string) error {
@@ -128,14 +130,36 @@ func HeadSHA(repoPath string) (string, error) {
 	return ref.Hash().String(), nil
 }
 
+func (gc *GitCloner) SetSSHKeyPath(path string) {
+	gc.SSHKeyPath = path
+}
+
 func (gc *GitCloner) isSSH(repoURL string) bool {
 	return strings.HasPrefix(repoURL, "git@") || strings.HasPrefix(repoURL, "ssh://")
 }
 
 func (gc *GitCloner) getSSHKeyPath() (string, error) {
+	if gc.SSHKeyPath != "" {
+		if _, err := os.Stat(gc.SSHKeyPath); err != nil {
+			return "", fmt.Errorf("specified SSH key not found: %s", gc.SSHKeyPath)
+		}
+		return gc.SSHKeyPath, nil
+	}
+
 	u, err := user.Current()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(u.HomeDir, ".ssh", "id_rsa"), nil
+	sshDir := filepath.Join(u.HomeDir, ".ssh")
+
+	// Try common key types in preference order
+	candidates := []string{"id_ed25519", "id_ecdsa", "id_rsa"}
+	for _, name := range candidates {
+		p := filepath.Join(sshDir, name)
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+
+	return "", fmt.Errorf("no SSH key found in %s (tried: %s)", sshDir, strings.Join(candidates, ", "))
 }

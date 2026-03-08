@@ -44,6 +44,10 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 	ignoreFlags := c.StringSlice("ignore")
 	noCache := c.Bool("noCache")
 
+	if sshKey := c.String("ssh-key"); sshKey != "" {
+		a.cloner.SetSSHKeyPath(sshKey)
+	}
+
 	// Validate flag combination
 	if onlyTemplates && !processTemplates {
 		return fmt.Errorf("--onlyTemplates requires --processTemplates to be set")
