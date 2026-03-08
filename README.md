@@ -9,7 +9,7 @@
   </p>
 </div>
 
-**Template smarter**: Clone repos and replace tokens safely with size limits, custom delimiters, and JSON/YAML inputs.
+**Template smarter**: Clone repos, replace tokens, or template existing projects — safely, with custom delimiters that won't clash with Helm, Jinja, or any other template language.
 
 ## TL;DR
 
@@ -30,7 +30,8 @@ yankrun template --dir ./my-project --input values.yaml --verbose
 
 - **Template values replacement** across a directory tree
 - **Git clone** with post-clone templating
-- **Custom delimiters** with smart wrapping (default `[[` `]]`)
+- **Custom delimiters** — use `[[` `]]`, `<%` `%>`, or anything that won't collide with your existing templates (Helm `{{ }}`, Jinja `{% %}`, etc.)
+- **Safe on real projects** — template a repo that already uses Helm/Go templates without breaking `{{ .Values.x }}`
 - **Size-based skipping** (default 3 MB)
 - **Verbose reporting** with per-file replacement counts
 - **JSON/YAML inputs** and ignore patterns
@@ -494,6 +495,45 @@ yankrun template --dir ./project --input values.yaml --processTemplates --verbos
 - Original `.tpl` files are removed
 
 </details>
+
+---
+
+## Real-World: Templating Projects That Already Have Templates
+
+Most template tools use `{{ }}` — which breaks if your project already has Helm charts, Go templates, or Jinja files. YankRun solves this with custom delimiters.
+
+**Example:** You have a Helm chart with `{{ .Values.replicaCount }}` and you want to replace your own placeholders without touching Helm's syntax:
+
+```yaml
+# values.yaml (Helm file — has {{ }} everywhere)
+replicaCount: {{ .Values.replicaCount }}  # Helm — untouched
+image:
+  repository: [[DOCKER_REGISTRY]]/[[APP_NAME]]  # YankRun — replaced
+  tag: [[VERSION]]                                # YankRun — replaced
+```
+
+```sh
+# Replace only [[ ]] placeholders, Helm {{ }} stays intact
+yankrun template --dir ./my-helm-chart --input values.yaml --verbose
+```
+
+This works because YankRun defaults to `[[ ]]` delimiters. If your project already uses `[[ ]]`, just pick something else:
+
+```sh
+# Use <% %> delimiters instead
+yankrun template --dir ./project --input values.yaml \
+  --startDelim "<%" --endDelim "%>"
+```
+
+**More examples of coexistence:**
+
+| Your project uses | YankRun delimiter | Command flag |
+|---|---|---|
+| Helm / Go (`{{ }}`) | `[[ ]]` (default) | *(none needed)* |
+| Jinja (`{% %}`, `{{ }}`) | `[[ ]]` (default) | *(none needed)* |
+| Terraform (`${ }`) | `[[ ]]` (default) | *(none needed)* |
+| Angular (`{{ }}`) | `[[ ]]` (default) | *(none needed)* |
+| Something using `[[ ]]` | `<% %>` | `--startDelim "<%" --endDelim "%>"` |
 
 ---
 
