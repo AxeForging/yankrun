@@ -24,14 +24,14 @@ builds:
       - -X main.Version={{.Version}}
       - -X main.BuildTime={{.Date}}
       - -X main.GitCommit={{.FullCommit}}
-    binary: yankrun-{{.OS}}-{{.Arch}}
+    binary: yankrun-{{.Os}}-{{.Arch}}
     ignore:
       - goos: windows
         goarch: arm
 
 archives:
   - format: tar.gz
-    name_template: "yankrun-{{.OS}}-{{.Arch}}"
+    name_template: "yankrun-{{.Os}}-{{.Arch}}"
     files:
       - README.md
       - LICENSE
