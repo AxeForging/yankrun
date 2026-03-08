@@ -37,8 +37,8 @@ archives:
       - LICENSE
     format_overrides:
       - goos: windows
-        format: zip
-        name_template: "yankrun-{{.OS}}-{{.Arch}}"
+        formats:
+          - zip
 
 checksum:
   name_template: 'checksums.txt'
