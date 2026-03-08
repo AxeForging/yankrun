@@ -8,10 +8,11 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5"
-    "github.com/go-git/go-git/v5/config"
-    "github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
-    memorystorage "github.com/go-git/go-git/v5/storage/memory"
+	memorystorage "github.com/go-git/go-git/v5/storage/memory"
 )
 
 type Cloner interface {
@@ -33,11 +34,7 @@ func (gc *GitCloner) CloneRepository(repoURL, outputDir string) error {
 	}
 
 	if gc.isSSH(repoURL) {
-		sshKeyPath, err := gc.getSSHKeyPath()
-		if err != nil {
-			return fmt.Errorf("failed to get SSH key path: %w", err)
-		}
-		auth, err := ssh.NewPublicKeysFromFile("git", sshKeyPath, "")
+		auth, err := gc.getSSHAuth()
 		if err != nil {
 			return fmt.Errorf("failed to create SSH auth method: %v", err)
 		}
@@ -64,11 +61,7 @@ func (gc *GitCloner) CloneRepositoryBranch(repoURL, branch, outputDir string) er
     }
 
     if gc.isSSH(repoURL) {
-        sshKeyPath, err := gc.getSSHKeyPath()
-        if err != nil {
-            return fmt.Errorf("failed to get SSH key path: %w", err)
-        }
-        auth, err := ssh.NewPublicKeysFromFile("git", sshKeyPath, "")
+        auth, err := gc.getSSHAuth()
         if err != nil {
             return fmt.Errorf("failed to create SSH auth method: %v", err)
         }
@@ -88,11 +81,7 @@ func (gc *GitCloner) ListRemoteBranches(repoURL string) ([]string, error) {
     listOpts := &git.ListOptions{}
 
     if gc.isSSH(repoURL) {
-        sshKeyPath, err := gc.getSSHKeyPath()
-        if err != nil {
-            return nil, fmt.Errorf("failed to get SSH key path: %w", err)
-        }
-        auth, err := ssh.NewPublicKeysFromFile("git", sshKeyPath, "")
+        auth, err := gc.getSSHAuth()
         if err != nil {
             return nil, fmt.Errorf("failed to create SSH auth method: %v", err)
         }
@@ -132,6 +121,29 @@ func HeadSHA(repoPath string) (string, error) {
 
 func (gc *GitCloner) SetSSHKeyPath(path string) {
 	gc.SSHKeyPath = path
+}
+
+// getSSHAuth returns an SSH auth method. It tries ssh-agent first (when SSH_AUTH_SOCK
+// is set and keys are loaded), then falls back to reading the key file directly.
+func (gc *GitCloner) getSSHAuth() (transport.AuthMethod, error) {
+	// Try ssh-agent first — handles passphrase-protected keys already unlocked in the agent
+	if os.Getenv("SSH_AUTH_SOCK") != "" {
+		auth, err := ssh.NewSSHAgentAuth("git")
+		if err == nil {
+			return auth, nil
+		}
+	}
+
+	// Fall back to key file with empty passphrase
+	sshKeyPath, err := gc.getSSHKeyPath()
+	if err != nil {
+		return nil, err
+	}
+	auth, err := ssh.NewPublicKeysFromFile("git", sshKeyPath, "")
+	if err != nil {
+		return nil, fmt.Errorf("ssh-agent not available and key file %s requires a passphrase (add your key to ssh-agent with: ssh-add %s)", sshKeyPath, sshKeyPath)
+	}
+	return auth, nil
 }
 
 func (gc *GitCloner) isSSH(repoURL string) bool {

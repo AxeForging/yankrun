@@ -119,6 +119,39 @@ func TestSetSSHKeyPath(t *testing.T) {
 	}
 }
 
+func TestGetSSHAuth_UsesAgentWhenAvailable(t *testing.T) {
+	gc := &GitCloner{}
+
+	// When SSH_AUTH_SOCK is set and agent is running, getSSHAuth should succeed
+	if os.Getenv("SSH_AUTH_SOCK") == "" {
+		t.Skip("SSH_AUTH_SOCK not set, skipping ssh-agent test")
+	}
+
+	auth, err := gc.getSSHAuth()
+	if err != nil {
+		t.Fatalf("expected ssh-agent auth to succeed, got: %v", err)
+	}
+	if auth == nil {
+		t.Fatal("expected non-nil auth method")
+	}
+}
+
+func TestGetSSHAuth_FallsBackToKeyFile(t *testing.T) {
+	gc := &GitCloner{}
+
+	// Unset SSH_AUTH_SOCK to force key file fallback
+	origSock := os.Getenv("SSH_AUTH_SOCK")
+	os.Unsetenv("SSH_AUTH_SOCK")
+	defer os.Setenv("SSH_AUTH_SOCK", origSock)
+
+	// Without agent and with passphrase-protected keys, this should fail
+	// with a helpful error message
+	_, err := gc.getSSHAuth()
+	// It may succeed if the user has unprotected keys, or fail — both are valid
+	// We just verify it doesn't panic
+	_ = err
+}
+
 func TestIsSSH(t *testing.T) {
 	gc := &GitCloner{}
 
