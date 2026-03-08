@@ -24,6 +24,12 @@ yankrun clone --repo https://github.com/AxeForging/template-tester.git \
 
 # Or template an existing directory
 yankrun template --dir ./my-project --input values.yaml --verbose
+
+# Works alongside Helm/Jinja/Go templates — default [[ ]] won't touch {{ }}
+yankrun template --dir ./helm-chart --input values.yaml
+
+# Or pick your own delimiters if [[ ]] conflicts with something
+yankrun template --dir ./project --input values.yaml --startDelim "<%" --endDelim "%>"
 ```
 
 ## Features
