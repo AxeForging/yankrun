@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. v1.0.0)'
-        required: true
+        description: "Release tag (leave empty for auto-bump from conventional commits)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -15,37 +16,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up Go
-        uses: actions/setup-go@v4
         with:
-          go-version: '1.23'
-          check-latest: true
+          fetch-depth: 0
 
-      - name: Build binaries
-        run: VERSION=${{ github.event.inputs.tag }} make build
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
 
-      - name: Create archives
+      - name: Run tests
+        run: go test ./... -v
+
+      - name: Determine version
+        id: version
+        uses: AxeForging/releaseforge@main
+        with:
+          command: bump
+
+      - name: Set tag
+        id: tag
         run: |
-          cd dist
-          for f in *; do
-            if [[ "$f" == *.exe ]]; then
-              zip "${f%.exe}.zip" "$f"
-            else
-              tar czf "$f.tar.gz" "$f"
-            fi
-          done
-          cd ..
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ steps.version.outputs.next-version }}" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Generate release notes
+        id: notes
+        uses: AxeForging/releaseforge@main
         with:
-          tag_name: ${{ github.event.inputs.tag }}
-          files: |
-            dist/*.tar.gz
-            dist/*.zip
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+          command: generate
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Create and push tag
+        run: |
+          echo "Releasing ${{ steps.tag.outputs.tag }}"
+          git tag ${{ steps.tag.outputs.tag }}
+          git push origin ${{ steps.tag.outputs.tag }}
 
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean --release-notes ${{ steps.notes.outputs.release-notes }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
