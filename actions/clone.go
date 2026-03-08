@@ -44,6 +44,10 @@ func (a *CloneAction) Execute(c *cli.Context) error {
 	dryRun := c.Bool("dryRun")
 	ignoreFlags := c.StringSlice("ignore")
 
+	if sshKey := c.String("ssh-key"); sshKey != "" {
+		a.cloner.SetSSHKeyPath(sshKey)
+	}
+
 	// Load defaults from config when flags not provided
 	cfg, _ := services.Load()
 	if cfg == nil {

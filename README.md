@@ -116,6 +116,28 @@ sudo mv yankrun /usr/local/bin/
 
 ---
 
+<details>
+<summary><strong>SSH Key Configuration</strong></summary>
+
+For SSH repos (`git@github.com:...`), yankrun auto-detects your SSH key in this order:
+
+1. `~/.ssh/id_ed25519`
+2. `~/.ssh/id_ecdsa`
+3. `~/.ssh/id_rsa`
+
+If your key has a different name or location, use the `--ssh-key` flag:
+
+```sh
+yankrun clone --repo git@github.com:org/repo.git \
+  --outputDir ./out --ssh-key ~/.ssh/my_custom_key
+```
+
+For HTTPS repos, no SSH key is needed.
+
+</details>
+
+---
+
 ## Quick Start
 
 ### 1. Create a values file

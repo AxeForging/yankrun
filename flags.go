@@ -90,3 +90,9 @@ var noCacheFlag = cli.BoolFlag{
 	Name:  "noCache, nc",
 	Usage: "Bypass cache and fetch fresh data from remote",
 }
+
+var sshKeyFlag = cli.StringFlag{
+	Name:  "ssh-key",
+	Value: "",
+	Usage: "Path to SSH private key (auto-detects id_ed25519, id_ecdsa, id_rsa if not set)",
+}
