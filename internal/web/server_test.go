@@ -67,7 +67,7 @@ func testServer(t *testing.T, dir string, forceDryRun bool) *Server {
 func TestScanAndDryRun(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "app.txt")
-	if err := os.WriteFile(path, []byte("Hello [[NAME]]"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("Hello [[NAME:toUpperCase]]"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -106,11 +106,18 @@ func TestScanAndDryRun(t *testing.T) {
 	if applied.Applied {
 		t.Fatal("dry-run apply should not modify files")
 	}
+	if len(applied.Summary.Files) != 1 || len(applied.Summary.Files[0].Previews) != 1 {
+		t.Fatalf("preview summary files = %+v, want evaluated preview", applied.Summary.Files)
+	}
+	preview := applied.Summary.Files[0].Previews[0]
+	if preview.Expression != "NAME:toUpperCase" || preview.Value != "WORLD" || preview.Missing || preview.Error != "" {
+		t.Fatalf("preview = %+v, want NAME:toUpperCase -> WORLD", preview)
+	}
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "Hello [[NAME]]" {
+	if string(got) != "Hello [[NAME:toUpperCase]]" {
 		t.Fatalf("file changed during dry run: %q", string(got))
 	}
 }

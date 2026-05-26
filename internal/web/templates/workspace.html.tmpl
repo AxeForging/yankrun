@@ -69,6 +69,16 @@
           <button class="primary" id="apply" data-force-dry="{{if .ForceDryRun}}true{{else}}false{{end}}" {{if .ForceDryRun}}disabled{{end}}>Apply</button>
         </div>
       </div>
+      <div class="panel card">
+        <div class="toolbar mini"><strong>Saved runs</strong><span class="status" id="savedCount">0</span></div>
+        <select id="savedRuns"></select>
+        <div class="actions">
+          <button class="quiet" id="loadRun" type="button">Load</button>
+          <button class="ghost" id="exportRuns" type="button">Export</button>
+          <button class="quiet" id="importRuns" type="button">Import</button>
+        </div>
+        <input id="importFile" type="file" accept="application/json" hidden>
+      </div>
     </aside>
   </section>
 </main>

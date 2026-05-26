@@ -34,8 +34,18 @@ type Summary struct {
 }
 
 type FileSummary struct {
-	Path   string         `json:"path"`
-	Counts map[string]int `json:"counts"`
+	Path     string         `json:"path"`
+	Counts   map[string]int `json:"counts"`
+	Previews []ValuePreview `json:"previews"`
+}
+
+type ValuePreview struct {
+	Key        string `json:"key"`
+	Expression string `json:"expression"`
+	Value      string `json:"value"`
+	Count      int    `json:"count"`
+	Missing    bool   `json:"missing"`
+	Error      string `json:"error,omitempty"`
 }
 
 type ApplyResult struct {
@@ -58,15 +68,20 @@ func (e Engine) ScanDir(dir string, settings TemplateSettings, provided domain.I
 	if err != nil {
 		return Summary{}, err
 	}
-	return Summarize(files, provided), nil
+	summary := Summarize(files, provided)
+	e.EvaluateSummary(&summary, files, summary.Values)
+	return summary, nil
 }
 
 func (e Engine) ApplyDir(dir string, settings TemplateSettings, provided domain.InputReplacement, values map[string]string, dryRun bool, forceDryRun bool) (ApplyResult, error) {
-	summary, err := e.ScanDir(dir, settings, provided)
+	files, err := e.Replacer.AnalyzeDirDetails(dir, settings.FileSizeLimit, settings.StartDelim, settings.EndDelim, settings.OnlyTemplates, settings.IgnorePatterns)
 	if err != nil {
 		return ApplyResult{}, err
 	}
+	summary := Summarize(files, provided)
 	merged := MergeValues(summary.Values, values)
+	summary.Values = merged
+	e.EvaluateSummary(&summary, files, merged)
 	final := BuildFinal(summary.Keys, merged)
 	result := ApplyResult{
 		Applied:      false,
@@ -170,6 +185,44 @@ func Summarize(files []services.ReplacementFile, provided domain.InputReplacemen
 		values[r.Key] = r.Value
 	}
 	return Summary{Counts: counts, Files: fileSummaries, Keys: keys, Values: values}
+}
+
+func (e Engine) EvaluateSummary(summary *Summary, files []services.ReplacementFile, values map[string]string) {
+	if summary == nil || e.Replacer == nil {
+		return
+	}
+	byPath := map[string]services.ReplacementFile{}
+	for _, file := range files {
+		byPath[file.Path] = file
+	}
+	for i := range summary.Files {
+		file, ok := byPath[summary.Files[i].Path]
+		if !ok {
+			continue
+		}
+		previews := make([]ValuePreview, 0, len(file.Placeholders))
+		for _, occurrence := range file.Placeholders {
+			value, found, err := e.Replacer.EvaluatePlaceholder(occurrence.Expression, values)
+			preview := ValuePreview{
+				Key:        occurrence.Key,
+				Expression: occurrence.Expression,
+				Value:      value,
+				Count:      occurrence.Count,
+				Missing:    !found,
+			}
+			if err != nil {
+				preview.Error = err.Error()
+			}
+			previews = append(previews, preview)
+		}
+		sort.Slice(previews, func(a, b int) bool {
+			if previews[a].Key == previews[b].Key {
+				return previews[a].Expression < previews[b].Expression
+			}
+			return previews[a].Key < previews[b].Key
+		})
+		summary.Files[i].Previews = previews
+	}
 }
 
 func MergeValues(base map[string]string, override map[string]string) map[string]string {

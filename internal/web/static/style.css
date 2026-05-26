@@ -15,6 +15,7 @@ body{margin:0;background:radial-gradient(circle at 12% 10%,#fff1eb 0,#fff7f3 26%
 .panel{border:1px solid rgba(17,24,39,.08);background:rgba(255,255,255,.78);box-shadow:0 30px 80px -55px rgba(17,24,39,.35),inset 0 1px 0 rgba(255,255,255,.9);backdrop-filter:blur(18px);border-radius:18px;overflow:hidden}
 .placeholder-panel{margin-top:24px}
 .toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:18px;border-bottom:1px solid var(--line)}
+.toolbar.mini{padding:0 0 12px;border-bottom:0}
 .toolbar strong{font-size:15px}
 .status{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
 .rows{display:grid;gap:10px;padding:16px}
@@ -30,6 +31,13 @@ input:focus{border-color:#ff8a63;box-shadow:0 0 0 4px rgba(255,90,36,.12)}
 .branch{color:#ff5a24}
 .path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hit-pill{border:1px solid #ffd6c7;background:#fff7f2;color:#9f3418;border-radius:999px;padding:2px 7px;font-size:11px}
+.eval{grid-column:2/4;display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,.8fr);gap:8px;align-items:center;margin:2px 0 7px;padding:7px 9px;border-radius:8px;background:#f6f8fb}
+.eval span,.eval strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eval span{color:#667085}
+.eval strong{font-weight:800;color:#111827}
+.eval.good strong{color:#05603a}
+.eval.missing strong{color:#9a3412}
+.eval.bad strong{color:#991b1b}
 .side{display:grid;gap:16px}
 .card{padding:18px}
 .metric{display:flex;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}

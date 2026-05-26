@@ -19,12 +19,20 @@ type Replacer interface {
 	ReplaceInDir(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error
 	AnalyzeDir(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) (map[string]int, error)
 	AnalyzeDirDetails(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) ([]ReplacementFile, error)
+	EvaluatePlaceholder(expression string, values map[string]string) (string, bool, error)
 	ProcessTemplateFiles(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error
 }
 
 type ReplacementFile struct {
-	Path   string         `json:"path"`
-	Counts map[string]int `json:"counts"`
+	Path         string                  `json:"path"`
+	Counts       map[string]int          `json:"counts"`
+	Placeholders []ReplacementOccurrence `json:"placeholders"`
+}
+
+type ReplacementOccurrence struct {
+	Key        string `json:"key"`
+	Expression string `json:"expression"`
+	Count      int    `json:"count"`
 }
 
 type FileReplacer struct {
@@ -171,6 +179,8 @@ func (fr *FileReplacer) walkAndAnalyzeFiles(dir string, basePath string, fileSiz
 		}
 		text := string(content)
 		counts := map[string]int{}
+		expressionCounts := map[string]int{}
+		expressionKeys := map[string]string{}
 		// simple scan for startDelim ... endDelim occurrences
 		for {
 			start := strings.Index(text, startDelim)
@@ -191,6 +201,8 @@ func (fr *FileReplacer) walkAndAnalyzeFiles(dir string, basePath string, fileSiz
 				continue
 			}
 			counts[baseKey] = counts[baseKey] + 1
+			expressionCounts[keyWithTransforms]++
+			expressionKeys[keyWithTransforms] = baseKey
 			text = text[end+len(endDelim):]
 		}
 		if len(counts) > 0 {
@@ -198,10 +210,30 @@ func (fr *FileReplacer) walkAndAnalyzeFiles(dir string, basePath string, fileSiz
 			if err != nil {
 				rel = path
 			}
-			result = append(result, ReplacementFile{Path: filepath.ToSlash(rel), Counts: counts})
+			occurrences := make([]ReplacementOccurrence, 0, len(expressionCounts))
+			for expr, count := range expressionCounts {
+				occurrences = append(occurrences, ReplacementOccurrence{Key: expressionKeys[expr], Expression: expr, Count: count})
+			}
+			result = append(result, ReplacementFile{Path: filepath.ToSlash(rel), Counts: counts, Placeholders: occurrences})
 		}
 	}
 	return result, nil
+}
+
+func (fr *FileReplacer) EvaluatePlaceholder(expression string, values map[string]string) (string, bool, error) {
+	key, transformations, err := fr.parsePlaceholder(expression)
+	if err != nil {
+		return "", false, err
+	}
+	baseValue, ok := values[key]
+	if !ok || baseValue == "" {
+		return "", false, nil
+	}
+	finalValue, err := fr.applyTransformations(baseValue, transformations)
+	if err != nil {
+		return "", true, err
+	}
+	return finalValue, true, nil
 }
 
 // ProcessTemplateFiles processes .tpl files by evaluating templates and removing .tpl suffix

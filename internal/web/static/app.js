@@ -3,8 +3,12 @@ const statusEl = document.querySelector("#status");
 const notice = document.querySelector("#notice");
 const cloneRepo = document.querySelector("#cloneRepo");
 const templateSelect = document.querySelector("#templateSelect");
+const savedRunsSelect = document.querySelector("#savedRuns");
 let summary = { keys: [], counts: {}, values: {} };
 let repoType = "ssh";
+let activeMode = "local";
+let lastRunMeta = { mode: "local" };
+let savedRuns = [];
 
 function show(msg, kind) {
   notice.textContent = msg;
@@ -25,6 +29,58 @@ function values() {
   const out = {};
   document.querySelectorAll("[data-key]").forEach(i => out[i.dataset.key] = i.value);
   return out;
+}
+
+function db() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("yankrun-workbench", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("runs", { keyPath: "id" });
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function storeRun(run) {
+  const database = await db();
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction("runs", "readwrite");
+    tx.objectStore("runs").put(run);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function allRuns() {
+  const database = await db();
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction("runs", "readonly");
+    const req = tx.objectStore("runs").getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function refreshSavedRuns() {
+  savedRuns = (await allRuns()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  document.querySelector("#savedCount").textContent = String(savedRuns.length);
+  savedRunsSelect.innerHTML = savedRuns.length
+    ? savedRuns.map(r => '<option value="' + esc(r.id) + '">' + esc(r.label) + '</option>').join("")
+    : '<option value="">No saved runs</option>';
+}
+
+async function rememberRun(kind, payload, body) {
+  const labelTarget = payload.repo || payload.template || "local";
+  const run = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+    label: kind + " · " + labelTarget,
+    kind,
+    payload,
+    values: values(),
+    summary: body.summary || summary,
+    createdAt: new Date().toISOString()
+  };
+  await storeRun(run);
+  await refreshSavedRuns();
 }
 
 function setBusy(label) {
@@ -84,16 +140,29 @@ function renderTree(key) {
     '<div class="tree-root">./</div>' +
     files.map((f, i) => {
       const branch = i === files.length - 1 ? "`--" : "+--";
-      return '<div class="tree-file"><span class="branch">' + branch + '</span><span class="path">' + esc(f.path) + '</span><span class="hit-pill">' + f.counts[key] + '</span></div>';
+      return '<div class="tree-file"><span class="branch">' + branch + '</span><span class="path">' + esc(f.path) + '</span><span class="hit-pill">' + f.counts[key] + '</span></div>' +
+        renderPreviews(f, key);
     }).join("") +
   '</div>';
 }
 
+function renderPreviews(file, key) {
+  const previews = Array.isArray(file.previews) ? file.previews.filter(p => p.key === key) : [];
+  if (!previews.length) return "";
+  return previews.map(p => {
+    const value = p.error ? "error: " + p.error : (p.missing ? "missing value" : p.value);
+    const cls = p.error ? "bad" : (p.missing ? "missing" : "good");
+    return '<div class="eval ' + cls + '"><span>' + esc(p.expression) + '</span><strong>' + esc(value) + '</strong></div>';
+  }).join("");
+}
+
 async function apply(dryRun) {
+  const payload = { values: values(), dryRun };
   setBusy(dryRun ? "previewing" : "applying");
   try {
-    const body = await postJSON("/api/apply", { values: values(), dryRun });
+    const body = await postJSON("/api/apply", payload);
     reportResult(body, "Applied", "Preview");
+    await rememberRun("local", payload, body);
     if (body.applied) await scan();
   } catch (err) {
     show(err.message || "Request failed", "err");
@@ -124,6 +193,7 @@ function reportResult(body, appliedVerb, previewVerb) {
 }
 
 function setMode(mode) {
+  activeMode = mode;
   document.querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
   document.querySelectorAll(".mode").forEach(p => p.classList.toggle("active", p.id === "mode-" + mode));
 }
@@ -160,10 +230,12 @@ async function cloneApply(dryRun) {
     values: values(),
     dryRun
   };
+  lastRunMeta = { mode: "clone", repo: payload.repo, branch: payload.branch, outputDir: payload.outputDir };
   setBusy(dryRun ? "previewing clone" : "cloning");
   try {
     const body = await postJSON("/api/clone", payload);
     reportResult(body, "Cloned and applied", "Clone preview");
+    await rememberRun("clone", payload, body);
     if (body.applied) await scan();
   } catch (err) {
     show(err.message || "Clone failed", "err");
@@ -180,16 +252,65 @@ async function generateApply(dryRun) {
     values: values(),
     dryRun
   };
+  lastRunMeta = { mode: "generate", template: payload.template, branch: payload.branch, outputDir: payload.outputDir };
   setBusy(dryRun ? "previewing generate" : "generating");
   try {
     const body = await postJSON("/api/generate", payload);
     reportResult(body, "Generated and applied", "Generate preview");
+    await rememberRun("generate", payload, body);
     if (body.applied) await scan();
   } catch (err) {
     show(err.message || "Generate failed", "err");
   } finally {
     setReady();
   }
+}
+
+function loadRun() {
+  const selected = savedRuns.find(r => r.id === savedRunsSelect.value);
+  if (!selected) return;
+  Object.entries(selected.values || {}).forEach(([key, value]) => {
+    const input = document.querySelector('[data-key="' + CSS.escape(key) + '"]');
+    if (input) input.value = value;
+  });
+  if (selected.summary) {
+    summary = selected.summary;
+    render();
+  }
+  if (selected.kind === "clone") {
+    setMode("clone");
+    cloneRepo.value = selected.payload.repo || "";
+    document.querySelector("#cloneBranch").value = selected.payload.branch || "";
+    document.querySelector("#cloneOutput").value = selected.payload.outputDir || "";
+  }
+  if (selected.kind === "generate") {
+    setMode("generate");
+    templateSelect.value = selected.payload.template || "";
+    document.querySelector("#generateBranch").value = selected.payload.branch || "";
+    document.querySelector("#generateOutput").value = selected.payload.outputDir || "";
+  }
+  if (selected.kind === "local") setMode("local");
+  show("Loaded saved run.", "ok");
+}
+
+function exportRuns() {
+  const blob = new Blob([JSON.stringify({ version: 1, runs: savedRuns }, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "yankrun-workbench-runs.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function importRuns(file) {
+  const parsed = JSON.parse(await file.text());
+  const runs = Array.isArray(parsed.runs) ? parsed.runs : [];
+  for (const run of runs) {
+    if (run && run.id) await storeRun(run);
+  }
+  await refreshSavedRuns();
+  show("Imported " + runs.length + " saved runs.", "ok");
 }
 
 document.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
@@ -201,5 +322,14 @@ document.querySelector("#clonePreview").addEventListener("click", () => cloneApp
 document.querySelector("#cloneApply").addEventListener("click", () => cloneApply(false));
 document.querySelector("#generatePreview").addEventListener("click", () => generateApply(true));
 document.querySelector("#generateApply").addEventListener("click", () => generateApply(false));
+document.querySelector("#loadRun").addEventListener("click", loadRun);
+document.querySelector("#exportRuns").addEventListener("click", exportRuns);
+document.querySelector("#importRuns").addEventListener("click", () => document.querySelector("#importFile").click());
+document.querySelector("#importFile").addEventListener("change", e => {
+  const file = e.target.files && e.target.files[0];
+  if (file) importRuns(file).catch(err => show(err.message || "Import failed", "err"));
+  e.target.value = "";
+});
 loadTemplates();
+refreshSavedRuns().catch(() => show("Saved runs unavailable in this browser.", "warn"));
 scan();
