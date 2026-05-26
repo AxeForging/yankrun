@@ -6,8 +6,8 @@ This document provides structured information for AI assistants working with the
 
 | Item | Value |
 |------|-------|
-| **Purpose** | CLI tool for template value replacement in files and git repositories |
-| **Language** | Go 1.24+ |
+| **Purpose** | CLI, TUI, and local web workbench for template value replacement in files and git repositories |
+| **Language** | Go 1.25+ |
 | **Repository** | https://github.com/AxeForging/yankrun |
 | **License** | MIT |
 | **Binary Size** | ~12-13MB (includes go-git library) |
@@ -24,7 +24,12 @@ yankrun/
 │   ├── clone.go            # `clone` command
 │   ├── generate.go         # `generate` command
 │   ├── setup.go            # `setup` command
+│   ├── serve.go            # `serve` command wrapper
 │   └── template.go         # `template` command
+├── internal/
+│   ├── tui/                # Terminal preview workflow
+│   ├── web/                # Embedded web UI, handlers, static assets
+│   └── workflow/           # Shared scan/apply/clone/generate workflow layer
 ├── services/               # Business logic
 │   ├── cloner.go           # Git clone operations
 │   ├── configio.go         # Config file I/O (~/.yankrun/config.yaml)
@@ -57,7 +62,7 @@ yankrun/
 ### Command Flow
 
 ```
-User Command → main.go → actions/*.go → services/*.go → File System
+User Command → main.go → actions/*.go → internal/workflow → services/*.go → File System
                  ↓
               flags.go (parse flags)
                  ↓
@@ -72,12 +77,23 @@ User Command → main.go → actions/*.go → services/*.go → File System
 
 | File | Purpose | Key Functions |
 |------|---------|---------------|
-| `services/replacer.go` | Placeholder scanning and replacement | `ReplaceInDir()`, `AnalyzeDir()`, `ProcessTemplateFiles()` |
+| `services/replacer.go` | Placeholder scanning, evaluated previews, and replacement | `ReplaceInDir()`, `AnalyzeDirDetails()`, `EvaluatePlaceholder()`, `ProcessTemplateFiles()` |
 | `services/parser.go` | Parse JSON/YAML input files | `Parse()` |
 | `services/cloner.go` | Git clone operations | `CloneRepository()`, `CloneRepositoryBranch()` |
 | `services/configio.go` | Config file management | `Load()`, `Save()`, `Reset()` |
+| `internal/workflow/workflow.go` | Shared workflow used by CLI/TUI/web | `ScanDir()`, `ApplyDir()`, `CloneAndApply()` |
+| `internal/web/server.go` | Embedded local workbench API | `Scan()`, `Apply()`, `Clone()`, `Generate()` |
+| `internal/tui/tui.go` | Preview-first terminal workflow | `Run()` |
 | `actions/clone.go` | Clone command handler | `Execute()` |
 | `actions/template.go` | Template command handler | `Execute()` |
+
+### Interactive Surfaces
+
+- `serve` embeds `internal/web/templates` and `internal/web/static` into the single binary.
+- The web UI supports local scan/apply, direct clone, and generate from configured templates.
+- Preview responses include file-level placeholder trees and evaluated transform previews.
+- Browser IndexedDB stores saved presets locally; JSON import/export is client-side only.
+- `tui` uses the same workflow engine for local directory scan/apply and remains preview-first.
 
 ---
 
