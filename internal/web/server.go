@@ -294,7 +294,7 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) TemplateOptions(ctx context.Context) []TemplateOption {
-	var out []TemplateOption
+	out := make([]TemplateOption, 0, len(s.config.Templates))
 	for _, t := range s.config.Templates {
 		out = append(out, TemplateOption{Name: t.Name, URL: t.URL, Description: t.Description, DefaultBranch: t.DefaultBranch})
 	}

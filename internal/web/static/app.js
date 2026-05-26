@@ -121,11 +121,12 @@ async function loadTemplates() {
   try {
     const r = await fetch("/api/templates");
     const templates = await readJSON(r);
-    if (!templates.length) {
+    const options = Array.isArray(templates) ? templates : [];
+    if (!options.length) {
       templateSelect.innerHTML = '<option value="">No configured templates</option>';
       return;
     }
-    templateSelect.innerHTML = templates.map(t =>
+    templateSelect.innerHTML = options.map(t =>
       '<option value="' + esc(t.name) + '">' + esc(t.name) + (t.defaultBranch ? " · " + esc(t.defaultBranch) : "") + '</option>'
     ).join("");
   } catch (err) {
