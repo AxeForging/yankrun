@@ -28,8 +28,14 @@ type TemplateSettings struct {
 
 type Summary struct {
 	Counts map[string]int    `json:"counts"`
+	Files  []FileSummary     `json:"files"`
 	Keys   []string          `json:"keys"`
 	Values map[string]string `json:"values"`
+}
+
+type FileSummary struct {
+	Path   string         `json:"path"`
+	Counts map[string]int `json:"counts"`
 }
 
 type ApplyResult struct {
@@ -48,11 +54,11 @@ func (e Engine) LoadInput(input string) (domain.InputReplacement, error) {
 }
 
 func (e Engine) ScanDir(dir string, settings TemplateSettings, provided domain.InputReplacement) (Summary, error) {
-	counts, err := e.Replacer.AnalyzeDir(dir, settings.FileSizeLimit, settings.StartDelim, settings.EndDelim, settings.OnlyTemplates, settings.IgnorePatterns)
+	files, err := e.Replacer.AnalyzeDirDetails(dir, settings.FileSizeLimit, settings.StartDelim, settings.EndDelim, settings.OnlyTemplates, settings.IgnorePatterns)
 	if err != nil {
 		return Summary{}, err
 	}
-	return Summarize(counts, provided), nil
+	return Summarize(files, provided), nil
 }
 
 func (e Engine) ApplyDir(dir string, settings TemplateSettings, provided domain.InputReplacement, values map[string]string, dryRun bool, forceDryRun bool) (ApplyResult, error) {
@@ -140,7 +146,20 @@ func (e Engine) CloneAndApply(opts CloneOptions, settings TemplateSettings, valu
 	return workDir, result, nil
 }
 
-func Summarize(counts map[string]int, provided domain.InputReplacement) Summary {
+func Summarize(files []services.ReplacementFile, provided domain.InputReplacement) Summary {
+	counts := map[string]int{}
+	fileSummaries := make([]FileSummary, 0, len(files))
+	for _, file := range files {
+		fileCounts := map[string]int{}
+		for key, count := range file.Counts {
+			counts[key] += count
+			fileCounts[key] = count
+		}
+		fileSummaries = append(fileSummaries, FileSummary{Path: file.Path, Counts: fileCounts})
+	}
+	sort.Slice(fileSummaries, func(i, j int) bool {
+		return fileSummaries[i].Path < fileSummaries[j].Path
+	})
 	keys := make([]string, 0, len(counts))
 	for k := range counts {
 		keys = append(keys, k)
@@ -150,7 +169,7 @@ func Summarize(counts map[string]int, provided domain.InputReplacement) Summary 
 	for _, r := range provided.Variables {
 		values[r.Key] = r.Value
 	}
-	return Summary{Counts: counts, Keys: keys, Values: values}
+	return Summary{Counts: counts, Files: fileSummaries, Keys: keys, Values: values}
 }
 
 func MergeValues(base map[string]string, override map[string]string) map[string]string {

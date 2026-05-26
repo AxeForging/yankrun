@@ -18,7 +18,13 @@ import (
 type Replacer interface {
 	ReplaceInDir(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error
 	AnalyzeDir(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) (map[string]int, error)
+	AnalyzeDirDetails(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) ([]ReplacementFile, error)
 	ProcessTemplateFiles(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error
+}
+
+type ReplacementFile struct {
+	Path   string         `json:"path"`
+	Counts map[string]int `json:"counts"`
 }
 
 type FileReplacer struct {
@@ -71,25 +77,62 @@ func (fr *FileReplacer) ReplaceInDir(dir string, replacements domain.InputReplac
 
 // AnalyzeDir returns a map of placeholder -> count discovered in files within size limit
 func (fr *FileReplacer) AnalyzeDir(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) (map[string]int, error) {
+	files, err := fr.AnalyzeDirDetails(dir, fileSizeLimit, startDelim, endDelim, onlyTemplates, ignorePatterns)
 	result := map[string]int{}
+	if err != nil {
+		return result, err
+	}
+	for _, file := range files {
+		for key, count := range file.Counts {
+			result[key] += count
+		}
+	}
+	return result, nil
+}
+
+func (fr *FileReplacer) AnalyzeDirDetails(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) ([]ReplacementFile, error) {
+	var result []ReplacementFile
 	fileSizeInBytes, err := fr.stringToBytes(fileSizeLimit)
 	if err != nil {
 		return result, err
 	}
-	err = fr.walkAndAnalyze(dir, dir, fileSizeInBytes, startDelim, endDelim, result, onlyTemplates, ignorePatterns)
+	err = fr.walkAndAnalyzeDetails(dir, dir, fileSizeInBytes, startDelim, endDelim, &result, onlyTemplates, ignorePatterns)
 	return result, err
 }
 
 func (fr *FileReplacer) walkAndAnalyze(dir string, basePath string, fileSizeInBytes int64, startDelim string, endDelim string, result map[string]int, onlyTemplates bool, ignorePatterns []string) error {
-	files, err := fr.FileSystem.ReadDir(dir)
+	files, err := fr.walkAndAnalyzeFiles(dir, basePath, fileSizeInBytes, startDelim, endDelim, onlyTemplates, ignorePatterns)
 	if err != nil {
 		return err
+	}
+	for _, file := range files {
+		for key, count := range file.Counts {
+			result[key] += count
+		}
+	}
+	return nil
+}
+
+func (fr *FileReplacer) walkAndAnalyzeDetails(dir string, basePath string, fileSizeInBytes int64, startDelim string, endDelim string, result *[]ReplacementFile, onlyTemplates bool, ignorePatterns []string) error {
+	files, err := fr.walkAndAnalyzeFiles(dir, basePath, fileSizeInBytes, startDelim, endDelim, onlyTemplates, ignorePatterns)
+	if err != nil {
+		return err
+	}
+	*result = append(*result, files...)
+	return nil
+}
+
+func (fr *FileReplacer) walkAndAnalyzeFiles(dir string, basePath string, fileSizeInBytes int64, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) ([]ReplacementFile, error) {
+	var result []ReplacementFile
+	files, err := fr.FileSystem.ReadDir(dir)
+	if err != nil {
+		return result, err
 	}
 	for _, file := range files {
 		path := fr.FileSystem.Join(dir, file.Name())
 		info, err := fr.FileSystem.Stat(path)
 		if err != nil {
-			return err
+			return result, err
 		}
 		if info.IsDir() {
 			// Skip common directories
@@ -100,9 +143,11 @@ func (fr *FileReplacer) walkAndAnalyze(dir string, basePath string, fileSizeInBy
 			if shouldIgnore(basePath, path, ignorePatterns) {
 				continue
 			}
-			if err := fr.walkAndAnalyze(path, basePath, fileSizeInBytes, startDelim, endDelim, result, onlyTemplates, ignorePatterns); err != nil {
-				return err
+			nested, err := fr.walkAndAnalyzeFiles(path, basePath, fileSizeInBytes, startDelim, endDelim, onlyTemplates, ignorePatterns)
+			if err != nil {
+				return result, err
 			}
+			result = append(result, nested...)
 			continue
 		}
 
@@ -119,12 +164,13 @@ func (fr *FileReplacer) walkAndAnalyze(dir string, basePath string, fileSizeInBy
 		}
 		content, err := fr.FileSystem.ReadFile(path)
 		if err != nil {
-			return err
+			return result, err
 		}
 		if isBinary(content) || isBinaryByExt(path) {
 			continue
 		}
 		text := string(content)
+		counts := map[string]int{}
 		// simple scan for startDelim ... endDelim occurrences
 		for {
 			start := strings.Index(text, startDelim)
@@ -144,11 +190,18 @@ func (fr *FileReplacer) walkAndAnalyze(dir string, basePath string, fileSizeInBy
 				text = text[end+len(endDelim):]
 				continue
 			}
-			result[baseKey] = result[baseKey] + 1
+			counts[baseKey] = counts[baseKey] + 1
 			text = text[end+len(endDelim):]
 		}
+		if len(counts) > 0 {
+			rel, err := filepath.Rel(basePath, path)
+			if err != nil {
+				rel = path
+			}
+			result = append(result, ReplacementFile{Path: filepath.ToSlash(rel), Counts: counts})
+		}
 	}
-	return nil
+	return result, nil
 }
 
 // ProcessTemplateFiles processes .tpl files by evaluating templates and removing .tpl suffix

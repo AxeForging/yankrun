@@ -89,6 +89,9 @@ func TestScanAndDryRun(t *testing.T) {
 	if summary.Counts["NAME"] != 1 {
 		t.Fatalf("NAME count = %d, want 1", summary.Counts["NAME"])
 	}
+	if len(summary.Files) != 1 || summary.Files[0].Path != "app.txt" || summary.Files[0].Counts["NAME"] != 1 {
+		t.Fatalf("summary files = %+v, want app.txt with NAME count", summary.Files)
+	}
 
 	body := bytes.NewBufferString(`{"values":{"NAME":"World"},"dryRun":true}`)
 	resp, err = http.Post(server.URL+"/api/apply", "application/json", body)

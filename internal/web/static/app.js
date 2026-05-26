@@ -70,10 +70,23 @@ function render() {
   }
   rows.innerHTML = summary.keys.map((k, i) =>
     '<div class="row" style="--i:' + i + '">' +
-    '<div><label>' + esc(k) + '</label>' +
-    '<input data-key="' + esc(k) + '" value="' + esc(summary.values[k] || "") + '" autocomplete="off"></div>' +
+    '<div class="value-cell"><label>' + esc(k) + '</label>' +
+    '<input data-key="' + esc(k) + '" value="' + esc(summary.values[k] || "") + '" autocomplete="off">' +
+    renderTree(k) + '</div>' +
     '<div class="count">' + (summary.counts[k] || 0) + ' hits</div></div>'
   ).join("");
+}
+
+function renderTree(key) {
+  const files = Array.isArray(summary.files) ? summary.files.filter(f => f.counts && f.counts[key]) : [];
+  if (!files.length) return "";
+  return '<div class="file-tree" aria-label="Files containing ' + esc(key) + '">' +
+    '<div class="tree-root">./</div>' +
+    files.map((f, i) => {
+      const branch = i === files.length - 1 ? "`--" : "+--";
+      return '<div class="tree-file"><span class="branch">' + branch + '</span><span class="path">' + esc(f.path) + '</span><span class="hit-pill">' + f.counts[key] + '</span></div>';
+    }).join("") +
+  '</div>';
 }
 
 async function apply(dryRun) {

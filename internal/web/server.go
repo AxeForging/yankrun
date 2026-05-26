@@ -63,9 +63,10 @@ type Options struct {
 }
 
 type PlaceholderSummary struct {
-	Counts map[string]int    `json:"counts"`
-	Keys   []string          `json:"keys"`
-	Values map[string]string `json:"values"`
+	Counts map[string]int         `json:"counts"`
+	Files  []workflow.FileSummary `json:"files"`
+	Keys   []string               `json:"keys"`
+	Values map[string]string      `json:"values"`
 }
 
 type ApplyRequest struct {
