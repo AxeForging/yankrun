@@ -4,11 +4,13 @@ const notice = document.querySelector("#notice");
 const cloneRepo = document.querySelector("#cloneRepo");
 const templateSelect = document.querySelector("#templateSelect");
 const savedRunsList = document.querySelector("#savedRunsList");
+const presetSearch = document.querySelector("#presetSearch");
 let summary = { keys: [], counts: {}, values: {} };
 let repoType = "ssh";
 let activeMode = "local";
 let lastRunMeta = { mode: "local" };
 let savedRuns = [];
+let presetFilter = "all";
 let evaluateTimer = 0;
 
 function show(msg, kind) {
@@ -63,11 +65,27 @@ async function allRuns() {
 
 async function refreshSavedRuns() {
   savedRuns = (await allRuns()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  renderSavedRuns();
+}
+
+function renderSavedRuns() {
   const targets = new Set(savedRuns.map(runTarget));
   document.querySelector("#savedMeta").textContent = savedRuns.length + " presets · " + targets.size + " targets";
-  savedRunsList.innerHTML = savedRuns.length
-    ? savedRuns.slice(0, 6).map(renderSavedRun).join("")
-    : '<div class="saved-empty">No saved runs yet.</div>';
+  const query = presetSearch.value.trim().toLowerCase();
+  const visible = savedRuns.filter(r => {
+    if (presetFilter !== "all" && r.kind !== presetFilter) return false;
+    if (!query) return true;
+    return [
+      r.kind,
+      runTarget(r),
+      r.payload.branch || "",
+      r.payload.outputDir || "",
+      Object.keys(r.values || {}).join(" ")
+    ].join(" ").toLowerCase().includes(query);
+  });
+  savedRunsList.innerHTML = visible.length
+    ? visible.slice(0, 8).map(renderSavedRun).join("")
+    : '<div class="saved-empty">No matching presets.</div>';
   savedRunsList.querySelectorAll("[data-run-id]").forEach(b => b.addEventListener("click", () => loadRun(b.dataset.runId)));
 }
 
@@ -375,6 +393,12 @@ async function importRuns(file) {
 
 document.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
 document.querySelectorAll("[data-repo-type]").forEach(b => b.addEventListener("click", () => setRepoType(b.dataset.repoType)));
+document.querySelectorAll("[data-preset-filter]").forEach(b => b.addEventListener("click", () => {
+  presetFilter = b.dataset.presetFilter;
+  document.querySelectorAll("[data-preset-filter]").forEach(x => x.classList.toggle("active", x.dataset.presetFilter === presetFilter));
+  renderSavedRuns();
+}));
+presetSearch.addEventListener("input", renderSavedRuns);
 document.querySelector("#refresh").addEventListener("click", scan);
 document.querySelector("#preview").addEventListener("click", () => apply(true));
 document.querySelector("#apply").addEventListener("click", () => apply(false));
