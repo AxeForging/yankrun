@@ -122,6 +122,55 @@ func TestScanAndDryRun(t *testing.T) {
 	}
 }
 
+func TestEvaluateUpdatesPreviewValues(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "app.txt"), []byte("Env [[ENVIRONMENT|default:dev]] App [[APP_NAME:toUpperCase]]"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(testServer(t, dir, false).Handler())
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/api/scan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var summary PlaceholderSummary
+	if err := json.NewDecoder(resp.Body).Decode(&summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.Counts["ENVIRONMENT"] != 1 {
+		t.Fatalf("ENVIRONMENT count = %d, want 1; summary=%+v", summary.Counts["ENVIRONMENT"], summary)
+	}
+
+	body, err := json.Marshal(EvaluateRequest{
+		Summary: summary,
+		Values:  map[string]string{"ENVIRONMENT": "prod", "APP_NAME": "demo"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = http.Post(server.URL+"/api/evaluate", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var evaluated PlaceholderSummary
+	if err := json.NewDecoder(resp.Body).Decode(&evaluated); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, file := range evaluated.Files {
+		for _, preview := range file.Previews {
+			got[preview.Expression] = preview.Value
+		}
+	}
+	if got["ENVIRONMENT|default:dev"] != "prod" || got["APP_NAME:toUpperCase"] != "DEMO" {
+		t.Fatalf("evaluated previews = %+v", got)
+	}
+}
+
 func TestApplyAndForcedDryRun(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "app.txt")

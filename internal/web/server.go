@@ -74,6 +74,11 @@ type ApplyRequest struct {
 	DryRun bool              `json:"dryRun"`
 }
 
+type EvaluateRequest struct {
+	Summary PlaceholderSummary `json:"summary"`
+	Values  map[string]string  `json:"values"`
+}
+
 type ApplyResponse struct {
 	Applied      bool               `json:"applied"`
 	ForcedDryRun bool               `json:"forcedDryRun"`
@@ -182,6 +187,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/", s.handleIndex)
 	s.mux.HandleFunc("/api/scan", s.handleScan)
 	s.mux.HandleFunc("/api/apply", s.handleApply)
+	s.mux.HandleFunc("/api/evaluate", s.handleEvaluate)
 	s.mux.HandleFunc("/api/templates", s.handleTemplates)
 	s.mux.HandleFunc("/api/clone", s.handleClone)
 	s.mux.HandleFunc("/api/generate", s.handleGenerate)
@@ -223,6 +229,34 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.Apply(req)
 	writeJSON(w, resp, err)
+}
+
+func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+	var req EvaluateRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	summary := req.Summary
+	summary.Values = req.Values
+	for i := range summary.Files {
+		for j := range summary.Files[i].Previews {
+			preview := &summary.Files[i].Previews[j]
+			value, found, err := s.replacer.EvaluatePlaceholder(preview.Expression, req.Values)
+			preview.Value = value
+			preview.Missing = !found
+			preview.Error = ""
+			if err != nil {
+				preview.Error = err.Error()
+			}
+		}
+	}
+	writeJSON(w, summary, nil)
 }
 
 func (s *Server) Scan() (PlaceholderSummary, error) {

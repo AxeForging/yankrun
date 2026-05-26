@@ -378,6 +378,9 @@ func (fr *FileReplacer) processTemplateFilesRecursive(dir string, basePath strin
 // parsePlaceholder extracts the base key and transformation functions from a placeholder string.
 // Example: "WORLD:gsub(WORLD,galaxy):toUpperCase" -> "WORLD", ["gsub(WORLD,galaxy)", "toUpperCase"]
 func (fr *FileReplacer) parsePlaceholder(placeholder string) (string, []string, error) {
+	if key, _, ok := strings.Cut(placeholder, "|default:"); ok {
+		placeholder = key
+	}
 	parts := strings.Split(placeholder, ":")
 	if len(parts) == 0 {
 		return "", nil, fmt.Errorf("empty placeholder")

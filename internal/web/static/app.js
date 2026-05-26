@@ -3,12 +3,13 @@ const statusEl = document.querySelector("#status");
 const notice = document.querySelector("#notice");
 const cloneRepo = document.querySelector("#cloneRepo");
 const templateSelect = document.querySelector("#templateSelect");
-const savedRunsSelect = document.querySelector("#savedRuns");
+const savedRunsList = document.querySelector("#savedRunsList");
 let summary = { keys: [], counts: {}, values: {} };
 let repoType = "ssh";
 let activeMode = "local";
 let lastRunMeta = { mode: "local" };
 let savedRuns = [];
+let evaluateTimer = 0;
 
 function show(msg, kind) {
   notice.textContent = msg;
@@ -63,9 +64,10 @@ async function allRuns() {
 async function refreshSavedRuns() {
   savedRuns = (await allRuns()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   document.querySelector("#savedCount").textContent = String(savedRuns.length);
-  savedRunsSelect.innerHTML = savedRuns.length
-    ? savedRuns.map(r => '<option value="' + esc(r.id) + '">' + esc(r.label) + '</option>').join("")
-    : '<option value="">No saved runs</option>';
+  savedRunsList.innerHTML = savedRuns.length
+    ? savedRuns.slice(0, 6).map(renderSavedRun).join("")
+    : '<div class="saved-empty">No saved runs yet.</div>';
+  savedRunsList.querySelectorAll("[data-run-id]").forEach(b => b.addEventListener("click", () => loadRun(b.dataset.runId)));
 }
 
 async function rememberRun(kind, payload, body) {
@@ -81,6 +83,17 @@ async function rememberRun(kind, payload, body) {
   };
   await storeRun(run);
   await refreshSavedRuns();
+}
+
+function renderSavedRun(run) {
+  const target = run.payload.repo || run.payload.template || "local";
+  const branch = run.payload.branch ? " · " + run.payload.branch : "";
+  const matches = run.summary && run.summary.counts ? Object.values(run.summary.counts).reduce((n, v) => n + v, 0) : 0;
+  return '<button class="saved-run" type="button" data-run-id="' + esc(run.id) + '">' +
+    '<span class="saved-kind">' + esc(run.kind) + '</span>' +
+    '<strong>' + esc(target) + '</strong>' +
+    '<span>' + esc(new Date(run.createdAt).toLocaleString()) + branch + ' · ' + matches + ' hits</span>' +
+  '</button>';
 }
 
 function setBusy(label) {
@@ -131,6 +144,7 @@ function render() {
     renderTree(k) + '</div>' +
     '<div class="count">' + (summary.counts[k] || 0) + ' hits</div></div>'
   ).join("");
+  document.querySelectorAll("[data-key]").forEach(i => i.addEventListener("input", scheduleEvaluate));
 }
 
 function renderTree(key) {
@@ -166,6 +180,35 @@ async function apply(dryRun) {
     if (body.applied) await scan();
   } catch (err) {
     show(err.message || "Request failed", "err");
+  } finally {
+    setReady();
+  }
+}
+
+function scheduleEvaluate() {
+  clearTimeout(evaluateTimer);
+  statusEl.textContent = "editing";
+  evaluateTimer = setTimeout(evaluateCurrent, 2000);
+}
+
+async function evaluateCurrent() {
+  if (!summary.keys || !summary.keys.length) return;
+  const active = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.key : "";
+  const start = document.activeElement && document.activeElement.selectionStart;
+  const end = document.activeElement && document.activeElement.selectionEnd;
+  statusEl.textContent = "evaluating";
+  try {
+    summary = await postJSON("/api/evaluate", { summary, values: values() });
+    render();
+    if (active) {
+      const input = document.querySelector('[data-key="' + CSS.escape(active) + '"]');
+      if (input) {
+        input.focus();
+        if (Number.isInteger(start) && Number.isInteger(end)) input.setSelectionRange(start, end);
+      }
+    }
+  } catch (err) {
+    show(err.message || "Evaluate failed", "err");
   } finally {
     setReady();
   }
@@ -266,8 +309,8 @@ async function generateApply(dryRun) {
   }
 }
 
-function loadRun() {
-  const selected = savedRuns.find(r => r.id === savedRunsSelect.value);
+function loadRun(id) {
+  const selected = savedRuns.find(r => r.id === id);
   if (!selected) return;
   Object.entries(selected.values || {}).forEach(([key, value]) => {
     const input = document.querySelector('[data-key="' + CSS.escape(key) + '"]');
@@ -322,7 +365,6 @@ document.querySelector("#clonePreview").addEventListener("click", () => cloneApp
 document.querySelector("#cloneApply").addEventListener("click", () => cloneApply(false));
 document.querySelector("#generatePreview").addEventListener("click", () => generateApply(true));
 document.querySelector("#generateApply").addEventListener("click", () => generateApply(false));
-document.querySelector("#loadRun").addEventListener("click", loadRun);
 document.querySelector("#exportRuns").addEventListener("click", exportRuns);
 document.querySelector("#importRuns").addEventListener("click", () => document.querySelector("#importFile").click());
 document.querySelector("#importFile").addEventListener("change", e => {
