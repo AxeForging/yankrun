@@ -190,7 +190,7 @@ func TestGenerateDryRunDoesNotCreateOutput(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repoDir, "readme.txt"), []byte("Hello [[NAME]]"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("git", "init")
+	cmd := exec.Command("git", "init", "-b", "main")
 	cmd.Dir = repoDir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init failed: %v\n%s", err, string(out))
