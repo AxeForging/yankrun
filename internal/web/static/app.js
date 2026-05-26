@@ -112,6 +112,10 @@ async function postJSON(url, payload) {
 }
 
 function reportResult(body, appliedVerb, previewVerb) {
+  if (body.summary && Array.isArray(body.summary.keys)) {
+    summary = body.summary;
+    render();
+  }
   if (body.applied) {
     show(appliedVerb + " " + body.totalMatches + " replacements across " + body.placeholders + " placeholders.", "ok");
     return;
