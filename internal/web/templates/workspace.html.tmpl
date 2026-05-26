@@ -34,13 +34,19 @@
           <p class="helper">Use the directory passed with <code>--dir</code>.</p>
         </div>
         <div class="mode" id="mode-clone">
+          <label>Repository access</label>
+          <div class="choice-row" role="group" aria-label="Repository access">
+            <button class="quiet active" type="button" data-repo-type="ssh">SSH</button>
+            <button class="quiet" type="button" data-repo-type="https">HTTPS</button>
+          </div>
           <label>Repository URL</label>
-          <input id="cloneRepo" placeholder="git@github.com:org/repo.git or https://github.com/org/repo.git">
+          <input id="cloneRepo" placeholder="git@github.com:org/repo.git">
           <label>Branch</label>
           <input id="cloneBranch" placeholder="main">
           <label>Output directory</label>
           <input id="cloneOutput" placeholder="./new-project">
-          <div class="actions"><button class="ghost" id="clonePreview">Preview clone</button><button class="primary" id="cloneApply">Clone and apply</button></div>
+          <p class="helper compact">SSH uses your local git/agent auth. HTTPS works for public repos and credential-managed private repos.</p>
+          <div class="actions"><button class="ghost" id="clonePreview" type="button">Preview clone</button><button class="primary" id="cloneApply" type="button">Clone and apply</button></div>
         </div>
         <div class="mode" id="mode-generate">
           <label>Template</label>
@@ -49,7 +55,8 @@
           <input id="generateBranch" placeholder="template default">
           <label>Output directory</label>
           <input id="generateOutput" placeholder="./new-project">
-          <div class="actions"><button class="ghost" id="generatePreview">Preview generate</button><button class="primary" id="generateApply">Generate and apply</button></div>
+          <p class="helper compact">Templates come from <code>~/.yankrun/config.yaml</code> and configured GitHub template discovery.</p>
+          <div class="actions"><button class="ghost" id="generatePreview" type="button">Preview generate</button><button class="primary" id="generateApply" type="button">Generate and apply</button></div>
         </div>
       </div>
       <div class="panel card">
@@ -59,7 +66,7 @@
         <div class="actions">
           <button class="quiet" id="refresh">Rescan</button>
           <button class="ghost" id="preview">Preview</button>
-          <button class="primary" id="apply" {{if .ForceDryRun}}disabled{{end}}>Apply</button>
+          <button class="primary" id="apply" data-force-dry="{{if .ForceDryRun}}true{{else}}false{{end}}" {{if .ForceDryRun}}disabled{{end}}>Apply</button>
         </div>
       </div>
     </aside>
