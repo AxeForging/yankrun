@@ -55,6 +55,8 @@ yankrun template --dir ./project --input values.yaml --startDelim "<%" --endDeli
 | Audience | Link |
 |----------|------|
 | **Users** | [docs/user/README.md](docs/user/README.md) - Installation, usage, examples |
+| **Commands** | [COMMANDS.md](COMMANDS.md) - Quick command and flag reference |
+| **Examples** | [EXAMPLES.md](EXAMPLES.md) - Copy-paste workflows for common use cases |
 | **AI Assistants** | [docs/AI/README.md](docs/AI/README.md) - Architecture, testing, common tasks |
 | **Transformations** | [doc/functions.md](doc/functions.md) - Function reference |
 

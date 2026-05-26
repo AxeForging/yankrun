@@ -4,6 +4,11 @@ A CLI tool for smart template replacement in repositories and directories.
 
 YankRun can run fully non-interactively, prompt in a terminal, or open a local web workbench for previewing template repos before writing files.
 
+Short references:
+
+- [Command reference](../../COMMANDS.md)
+- [Copy-paste examples](../../EXAMPLES.md)
+
 ## Table of Contents
 
 - [Installation](#installation)
