@@ -63,7 +63,8 @@ async function allRuns() {
 
 async function refreshSavedRuns() {
   savedRuns = (await allRuns()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  document.querySelector("#savedCount").textContent = String(savedRuns.length);
+  const targets = new Set(savedRuns.map(runTarget));
+  document.querySelector("#savedMeta").textContent = savedRuns.length + " presets · " + targets.size + " targets";
   savedRunsList.innerHTML = savedRuns.length
     ? savedRuns.slice(0, 6).map(renderSavedRun).join("")
     : '<div class="saved-empty">No saved runs yet.</div>';
@@ -79,20 +80,36 @@ async function rememberRun(kind, payload, body) {
     payload,
     values: values(),
     summary: body.summary || summary,
+    target: labelTarget,
+    placeholders: body.summary && body.summary.keys ? body.summary.keys.length : summary.keys.length,
+    matches: body.summary && body.summary.counts ? totalMatches(body.summary.counts) : totalMatches(summary.counts),
     createdAt: new Date().toISOString()
   };
   await storeRun(run);
   await refreshSavedRuns();
 }
 
+function runTarget(run) {
+  return run.target || run.payload.repo || run.payload.template || "local";
+}
+
+function totalMatches(counts) {
+  return counts ? Object.values(counts).reduce((n, v) => n + v, 0) : 0;
+}
+
+function shortTarget(target) {
+  return target.replace(/^https:\/\/github\.com\//, "").replace(/^git@github\.com:/, "").replace(/\.git$/, "");
+}
+
 function renderSavedRun(run) {
-  const target = run.payload.repo || run.payload.template || "local";
+  const target = runTarget(run);
   const branch = run.payload.branch ? " · " + run.payload.branch : "";
-  const matches = run.summary && run.summary.counts ? Object.values(run.summary.counts).reduce((n, v) => n + v, 0) : 0;
+  const matches = run.matches || (run.summary && run.summary.counts ? totalMatches(run.summary.counts) : 0);
+  const placeholders = run.placeholders || (run.summary && run.summary.keys ? run.summary.keys.length : 0);
   return '<button class="saved-run" type="button" data-run-id="' + esc(run.id) + '">' +
-    '<span class="saved-kind">' + esc(run.kind) + '</span>' +
-    '<strong>' + esc(target) + '</strong>' +
-    '<span>' + esc(new Date(run.createdAt).toLocaleString()) + branch + ' · ' + matches + ' hits</span>' +
+    '<div class="saved-main"><span class="saved-kind">' + esc(run.kind) + '</span><strong>' + esc(shortTarget(target)) + '</strong></div>' +
+    '<div class="saved-stats"><span>' + placeholders + ' keys</span><span>' + matches + ' hits</span></div>' +
+    '<span class="saved-time">' + esc(new Date(run.createdAt).toLocaleString()) + branch + '</span>' +
   '</button>';
 }
 

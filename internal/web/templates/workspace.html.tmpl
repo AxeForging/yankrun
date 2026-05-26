@@ -7,6 +7,19 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<aside class="preset-rail" aria-label="Saved presets">
+  <div class="panel card">
+    <div class="toolbar mini saved-head">
+      <div><strong>Saved presets</strong><span id="savedMeta">0 presets</span></div>
+      <div class="mini-actions">
+        <button class="quiet icon-btn" id="exportRuns" type="button" title="Export presets">Export</button>
+        <button class="quiet icon-btn" id="importRuns" type="button" title="Import presets">Import</button>
+      </div>
+    </div>
+    <div class="saved-list" id="savedRunsList"><div class="saved-empty">No saved runs yet.</div></div>
+    <input id="importFile" type="file" accept="application/json" hidden>
+  </div>
+</aside>
 <main class="shell">
   <section class="top">
     <div class="brand"><div class="mark">Y</div><div>YankRun Workbench</div></div>
@@ -68,15 +81,6 @@
           <button class="ghost" id="preview">Preview</button>
           <button class="primary" id="apply" data-force-dry="{{if .ForceDryRun}}true{{else}}false{{end}}" {{if .ForceDryRun}}disabled{{end}}>Apply</button>
         </div>
-      </div>
-      <div class="panel card">
-        <div class="toolbar mini"><strong>Saved runs</strong><span class="status" id="savedCount">0</span></div>
-        <div class="saved-list" id="savedRunsList"><div class="saved-empty">No saved runs yet.</div></div>
-        <div class="actions">
-          <button class="ghost" id="exportRuns" type="button">Export</button>
-          <button class="quiet" id="importRuns" type="button">Import</button>
-        </div>
-        <input id="importFile" type="file" accept="application/json" hidden>
       </div>
     </aside>
   </section>
