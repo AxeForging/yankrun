@@ -270,6 +270,31 @@ func TestTemplateUsesConfigDefaults(t *testing.T) {
 	}
 }
 
+func TestTUIDryRunDoesNotModifyFiles(t *testing.T) {
+	bin := buildBinary(t)
+	testDir := t.TempDir()
+	path := filepath.Join(testDir, "app.txt")
+	if err := os.WriteFile(path, []byte("App: [[NAME]]"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	valsPath := writeFile(t, t.TempDir(), "values.yaml", `variables: [{key: NAME, value: MyApp}]`)
+
+	cmd := exec.Command(bin, "tui", "--dir", testDir, "--input", valsPath, "--dryRun")
+	cmd.Dir = repoRoot(t)
+	cmd.Stdin = strings.NewReader("\n")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("tui dry-run failed: %v\n%s", err, string(out))
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "App: [[NAME]]" {
+		t.Fatalf("tui dry-run modified file: %q", string(got))
+	}
+}
+
 func TestIgnorePatternsFlag(t *testing.T) {
 	bin := buildBinary(t)
 	testDir := t.TempDir()

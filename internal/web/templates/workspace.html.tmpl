@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YankRun Workbench</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main class="shell">
+  <section class="top">
+    <div class="brand"><div class="mark">Y</div><div>YankRun Workbench</div></div>
+    <div class="pill">{{.Dir}} · {{.StartDelim}}KEY{{.EndDelim}}</div>
+  </section>
+  <section class="grid">
+    <div class="hero">
+      <div class="eyebrow"><span class="dot"></span>Scan · Preview · Apply</div>
+      <h1>Template repos without guessing.</h1>
+      <p>Edit discovered values, preview the replacement count, and apply only when the result is clear. The server is local by default and dry-run mode blocks writes.</p>
+      <div id="notice" class="banner"></div>
+      <div class="panel placeholder-panel">
+        <div class="toolbar"><strong>Discovered placeholders</strong><span class="status" id="status">loading</span></div>
+        <div class="rows" id="rows"><div class="empty">Scanning directory...</div></div>
+      </div>
+    </div>
+    <aside class="side">
+      <div class="panel card">
+        <div class="mode-tabs">
+          <button class="quiet active" data-mode="local">Local</button>
+          <button class="quiet" data-mode="clone">Clone</button>
+          <button class="quiet" data-mode="generate">Generate</button>
+        </div>
+        <div class="mode active" id="mode-local">
+          <p class="helper">Use the directory passed with <code>--dir</code>.</p>
+        </div>
+        <div class="mode" id="mode-clone">
+          <label>Repository URL</label>
+          <input id="cloneRepo" placeholder="git@github.com:org/repo.git or https://github.com/org/repo.git">
+          <label>Branch</label>
+          <input id="cloneBranch" placeholder="main">
+          <label>Output directory</label>
+          <input id="cloneOutput" placeholder="./new-project">
+          <div class="actions"><button class="ghost" id="clonePreview">Preview clone</button><button class="primary" id="cloneApply">Clone and apply</button></div>
+        </div>
+        <div class="mode" id="mode-generate">
+          <label>Template</label>
+          <select id="templateSelect"></select>
+          <label>Branch</label>
+          <input id="generateBranch" placeholder="template default">
+          <label>Output directory</label>
+          <input id="generateOutput" placeholder="./new-project">
+          <div class="actions"><button class="ghost" id="generatePreview">Preview generate</button><button class="primary" id="generateApply">Generate and apply</button></div>
+        </div>
+      </div>
+      <div class="panel card">
+        <div class="metric"><span>Placeholders</span><strong id="metricKeys">0</strong></div>
+        <div class="metric"><span>Total matches</span><strong id="metricMatches">0</strong></div>
+        <div class="metric"><span>Write mode</span><strong id="metricMode">{{if .ForceDryRun}}DRY{{else}}LIVE{{end}}</strong></div>
+        <div class="actions">
+          <button class="quiet" id="refresh">Rescan</button>
+          <button class="ghost" id="preview">Preview</button>
+          <button class="primary" id="apply" {{if .ForceDryRun}}disabled{{end}}>Apply</button>
+        </div>
+      </div>
+    </aside>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
