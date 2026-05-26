@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"fmt"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -30,12 +31,30 @@ func shouldIgnore(basePath, fullPath string, ignorePatterns []string) bool {
 	if err != nil {
 		return false
 	}
+	rel = filepath.ToSlash(rel)
+	base := path.Base(rel)
 	for _, pattern := range ignorePatterns {
-		if matched, _ := filepath.Match(pattern, rel); matched {
+		pattern = filepath.ToSlash(pattern)
+		if matched, _ := path.Match(pattern, rel); matched {
 			return true
 		}
-		if matched, _ := filepath.Match(pattern, filepath.Base(fullPath)); matched {
+		if matched, _ := path.Match(pattern, base); matched {
 			return true
+		}
+		if strings.HasSuffix(pattern, "/**") {
+			prefix := strings.TrimSuffix(pattern, "/**")
+			if rel == prefix || strings.HasPrefix(rel, prefix+"/") {
+				return true
+			}
+		}
+		if strings.HasPrefix(pattern, "**/") {
+			suffix := strings.TrimPrefix(pattern, "**/")
+			if matched, _ := path.Match(suffix, base); matched {
+				return true
+			}
+			if matched, _ := path.Match(suffix, rel); matched {
+				return true
+			}
 		}
 	}
 	return false
@@ -195,7 +214,7 @@ func (fr *FileReplacer) processTemplateFilesRecursive(dir string, basePath strin
 		// Process the template content
 		newContent := string(content)
 		numReplacements := 0
-		
+
 		// Create a map for quick lookup of replacement values by base key
 		replacementValues := make(map[string]string)
 		for _, r := range replacements.Variables {
@@ -247,9 +266,12 @@ func (fr *FileReplacer) processTemplateFilesRecursive(dir string, basePath strin
 
 		// Create new filename without .tpl suffix
 		newPath := strings.TrimSuffix(path, ".tpl")
-		
+		if _, err := fr.FileSystem.Stat(newPath); err == nil {
+			return fmt.Errorf("template target already exists: %s", newPath)
+		}
+
 		// Write the processed content to the new file
-		err = fr.FileSystem.WriteFile(newPath, []byte(newContent), 0644)
+		err = fr.FileSystem.WriteFile(newPath, []byte(newContent), info.Mode().Perm())
 		if err != nil {
 			return err
 		}
@@ -276,10 +298,16 @@ func (fr *FileReplacer) parsePlaceholder(placeholder string) (string, []string, 
 		return "", nil, fmt.Errorf("empty placeholder")
 	}
 
-	baseKey := parts[0]
+	baseKey := strings.TrimSpace(parts[0])
+	if baseKey == "" {
+		return "", nil, fmt.Errorf("empty placeholder")
+	}
 	var transformations []string
 	if len(parts) > 1 {
-		transformations = parts[1:]
+		transformations = make([]string, 0, len(parts)-1)
+		for _, p := range parts[1:] {
+			transformations = append(transformations, strings.TrimSpace(p))
+		}
 	}
 	return baseKey, transformations, nil
 }
@@ -378,7 +406,7 @@ func (fr *FileReplacer) replacePatterns(dir string, basePath string, replacement
 			numReplacements++
 		}
 
-		err = fr.FileSystem.WriteFile(path, []byte(newContent), 0644)
+		err = fr.FileSystem.WriteFile(path, []byte(newContent), info.Mode().Perm())
 		if err != nil {
 			return err
 		}
@@ -397,11 +425,11 @@ func (fr *FileReplacer) applyTransformations(value string, transformations []str
 	for _, t := range transformations {
 		var err error
 		switch {
-		case strings.HasPrefix(t, "toUpperCase"):
+		case t == "toUpperCase":
 			transformedValue = strings.ToUpper(transformedValue)
-		case strings.HasPrefix(t, "toLowerCase"), strings.HasPrefix(t, "toDownCase"):
+		case t == "toLowerCase", t == "toDownCase":
 			transformedValue = strings.ToLower(transformedValue)
-		case strings.HasPrefix(t, "gsub("):
+		case strings.HasPrefix(t, "gsub(") && strings.HasSuffix(t, ")"):
 			transformedValue, err = fr.applyGsub(transformedValue, t)
 			if err != nil {
 				return "", err
@@ -416,8 +444,11 @@ func (fr *FileReplacer) applyTransformations(value string, transformations []str
 // applyGsub applies the gsub transformation.
 // It parses arguments like "gsub(old,new)" or "gsub( ,new)"
 func (fr *FileReplacer) applyGsub(value, transformFunc string) (string, error) {
+	if !strings.HasPrefix(transformFunc, "gsub(") || !strings.HasSuffix(transformFunc, ")") {
+		return "", fmt.Errorf("invalid gsub syntax: %s. Expected gsub(old,new)", transformFunc)
+	}
 	// Extract arguments from gsub(arg1,arg2)
-	argsStr := transformFunc[len("gsub("):strings.LastIndex(transformFunc, ")")]
+	argsStr := transformFunc[len("gsub(") : len(transformFunc)-1]
 
 	// Split arguments, handling escaped commas or commas within quotes if necessary
 	// For now, a simple split by comma, assuming no escaped commas or quotes

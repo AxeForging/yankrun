@@ -35,9 +35,7 @@ func (a *CloneAction) Execute(c *cli.Context) error {
 	outputDir := c.String("outputDir")
 	verbose := c.Bool("verbose")
 	input := c.String("input")
-	fileSizeLimit := c.String("fileSizeLimit")
-	startDelim := c.String("startDelim")
-	endDelim := c.String("endDelim")
+	branch := c.String("branch")
 	interactive := c.Bool("interactive")
 	processTemplates := c.Bool("processTemplates")
 	onlyTemplates := c.Bool("onlyTemplates")
@@ -53,23 +51,13 @@ func (a *CloneAction) Execute(c *cli.Context) error {
 	if cfg == nil {
 		cfg = &domain.Config{}
 	}
-	if startDelim == "" && cfg.StartDelim != "" {
-		startDelim = cfg.StartDelim
+	startDelim, endDelim, fileSizeLimit := templateSettings(c, cfg)
+
+	if repoURL == "" {
+		return fmt.Errorf("--repo is required for clone command")
 	}
-	if endDelim == "" && cfg.EndDelim != "" {
-		endDelim = cfg.EndDelim
-	}
-	if fileSizeLimit == "" && cfg.FileSizeLimit != "" {
-		fileSizeLimit = cfg.FileSizeLimit
-	}
-	if startDelim == "" {
-		startDelim = "[["
-	}
-	if endDelim == "" {
-		endDelim = "]]"
-	}
-	if fileSizeLimit == "" {
-		fileSizeLimit = "3 mb"
+	if outputDir == "" && !dryRun {
+		return fmt.Errorf("--outputDir is required for clone command")
 	}
 
 	// Validate flag combination
@@ -77,15 +65,35 @@ func (a *CloneAction) Execute(c *cli.Context) error {
 		return fmt.Errorf("--onlyTemplates requires --processTemplates to be set")
 	}
 
-	if err := a.fs.EnsureDir(outputDir); err != nil {
-		return err
+	workDir := outputDir
+	if dryRun {
+		tmp, err := os.MkdirTemp("", "yankrun-clone-dryrun-*")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(tmp)
+		workDir = tmp
+	} else {
+		if err := a.fs.EnsureDir(outputDir); err != nil {
+			return err
+		}
 	}
 
-	if err := a.cloner.CloneRepository(repoURL, outputDir); err != nil {
-		return err
+	if branch != "" {
+		if err := a.cloner.CloneRepositoryBranch(repoURL, branch, workDir); err != nil {
+			return err
+		}
+	} else {
+		if err := a.cloner.CloneRepository(repoURL, workDir); err != nil {
+			return err
+		}
 	}
 
-	helpers.Log.Info().Msgf("Cloned into %s", outputDir)
+	if dryRun {
+		helpers.Log.Info().Msg("Cloned into temporary directory for dry run")
+	} else {
+		helpers.Log.Info().Msgf("Cloned into %s", outputDir)
+	}
 
 	// Parse provided replacements if any
 	var provided domain.InputReplacement
@@ -101,7 +109,7 @@ func (a *CloneAction) Execute(c *cli.Context) error {
 	ignorePatterns := append(ignoreFlags, provided.IgnorePath...)
 
 	// Analyze placeholders in cloned directory
-	counts, err := a.replacer.AnalyzeDir(outputDir, fileSizeLimit, startDelim, endDelim, onlyTemplates, ignorePatterns)
+	counts, err := a.replacer.AnalyzeDir(workDir, fileSizeLimit, startDelim, endDelim, onlyTemplates, ignorePatterns)
 	if err != nil {
 		return err
 	}
@@ -166,14 +174,14 @@ func (a *CloneAction) Execute(c *cli.Context) error {
 
 	// Skip regular templating if onlyTemplates is set
 	if !onlyTemplates {
-		if err := a.replacer.ReplaceInDir(outputDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
+		if err := a.replacer.ReplaceInDir(workDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
 			return err
 		}
 	}
 
 	// Process .tpl files if requested
 	if processTemplates {
-		if err := a.replacer.ProcessTemplateFiles(outputDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
+		if err := a.replacer.ProcessTemplateFiles(workDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
 			return err
 		}
 		helpers.Log.Info().Msg("Template file processing complete.")
