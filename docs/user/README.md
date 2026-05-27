@@ -2,11 +2,19 @@
 
 A CLI tool for smart template replacement in repositories and directories.
 
+YankRun can run fully non-interactively, prompt in a terminal, or open a local web workbench for previewing template repos before writing files.
+
+Short references:
+
+- [Command reference](../../COMMANDS.md)
+- [Copy-paste examples](../../EXAMPLES.md)
+
 ## Table of Contents
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Commands](#commands)
+- [Interactive Workbench](#interactive-workbench)
 - [Values File Format](#values-file-format)
 - [Transformation Functions](#transformation-functions)
 - [Configuration](#configuration)
@@ -78,7 +86,7 @@ yankrun version
 </details>
 
 <details>
-<summary><strong>From Source (Go 1.24+)</strong></summary>
+<summary><strong>From Source (Go 1.25+)</strong></summary>
 
 ```sh
 go install github.com/AxeForging/yankrun@latest
@@ -120,6 +128,12 @@ yankrun clone \
   --input values.yaml \
   --outputDir ./my-new-project \
   --verbose
+```
+
+Or inspect it interactively first:
+
+```sh
+yankrun serve --dir ./my-new-project --input values.yaml
 ```
 
 ### Step 3: Check the output
@@ -294,6 +308,89 @@ yankrun generate \
 </details>
 
 **Caching:** The `generate` command caches GitHub-discovered repos and template variables in `~/.yankrun/cache.yaml`. Dry runs use cached data when available, avoiding re-cloning. Use `--noCache` to force fresh data.
+
+---
+
+### `serve`
+
+Open a local web workbench for local directories, direct clones, and configured templates.
+
+```sh
+yankrun serve --dir ./my-project --input values.yaml
+```
+
+The server binds to `127.0.0.1:17817` by default. It is intended for local use and shares the same parser, cloner, and replacer logic as the CLI commands.
+
+<details>
+<summary><strong>All flags</strong></summary>
+
+| Flag | Alias | Description | Default |
+|------|-------|-------------|---------|
+| `--dir` | `-d` | Directory for local scan/apply | - |
+| `--input` | `-i` | Values file path | - |
+| `--addr` | | Listen address | `127.0.0.1:17817` |
+| `--startDelim` | `--sd` | Template start delimiter | `[[` |
+| `--endDelim` | `--ed` | Template end delimiter | `]]` |
+| `--fileSizeLimit` | `--fl` | Skip files larger than this limit | `3 mb` |
+| `--processTemplates` | `--pt` | Process `.tpl` files | `false` |
+| `--onlyTemplates` | `--ot` | Only process `.tpl` files | `false` |
+| `--dryRun` | `--dr` | Force preview-only mode | `false` |
+| `--ignore` | | Glob patterns to skip | - |
+| `--verbose` | `-v` | Show detailed output | `false` |
+
+</details>
+
+The workbench provides:
+
+- **Local** mode for a directory passed with `--dir`
+- **Clone** mode for SSH or HTTPS repositories
+- **Generate** mode for `~/.yankrun/config.yaml` templates and GitHub-discovered templates
+- file-level placeholder trees so you can see what will change
+- evaluated transform previews, for example `APP_NAME:toUpperCase -> MYAPP`
+- idle refresh after value edits so previews stay current
+- saved presets stored in browser IndexedDB, searchable by repo/template/branch/output/value keys
+- preset JSON export/import for moving saved runs between browsers
+
+### `tui`
+
+Open a preview-first terminal workflow for local directory templating.
+
+```sh
+yankrun tui --dir ./my-project --input values.yaml
+yankrun tui --dir ./my-project --dryRun
+```
+
+The TUI is intentionally conservative: it scans, summarizes, previews the replacement count, and respects `--dryRun` before writing.
+
+---
+
+## Interactive Workbench
+
+Use `serve` when you want to inspect a template repo before writing it to disk, reuse values across repeated runs, or compare where placeholders appear.
+
+Typical flow:
+
+1. Start the server with an optional local directory and values file.
+2. Use **Local**, **Clone**, or **Generate** mode.
+3. Click **Preview** before applying.
+4. Edit values; evaluated previews refresh after a short idle delay.
+5. Restore prior work from the left preset rail when repeating a repo/template.
+
+For clone mode:
+
+```text
+Repository URL: https://github.com/AxeForging/template-tester.git
+Branch: main
+Output directory: ./my-new-project
+```
+
+SSH URLs also work when your local environment has the needed SSH key or agent configured:
+
+```text
+git@github.com:AxeForging/template-tester.git
+```
+
+Presets stay local to the browser unless exported manually as JSON.
 
 ---
 

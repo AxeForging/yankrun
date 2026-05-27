@@ -3,7 +3,7 @@
 <div align="center">
   <img src="doc/banner.png" alt="YankRun" width="400">
   <p>
-    <img src="https://img.shields.io/badge/Go-1.24%2B-00ADD8?style=flat-square&logo=go" alt="Go Version">
+    <img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?style=flat-square&logo=go" alt="Go Version">
     <img src="https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-darkblue?style=flat-square&logo=windows" alt="OS Support">
     <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
   </p>
@@ -25,6 +25,9 @@ yankrun clone --repo https://github.com/AxeForging/template-tester.git \
 # Or template an existing directory
 yankrun template --dir ./my-project --input values.yaml --verbose
 
+# Or use the local web workbench
+yankrun serve --dir ./my-project --input values.yaml
+
 # Works alongside Helm/Jinja/Go templates — default [[ ]] won't touch {{ }}
 yankrun template --dir ./helm-chart --input values.yaml
 
@@ -44,12 +47,16 @@ yankrun template --dir ./project --input values.yaml --startDelim "<%" --endDeli
 - **Transformation functions** (`toUpperCase`, `toLowerCase`, `gsub`)
 - **Template file processing** (`.tpl` files processed and renamed)
 - **Caching** for `generate` - caches GitHub repos and template variables in `~/.yankrun/cache.yaml`
+- **Interactive workbench** (`serve`) for local/clone/generate workflows with file trees, evaluated transform previews, saved presets, and JSON import/export
+- **Safe terminal workflow** (`tui`) for preview-first directory templating
 
 ## Documentation
 
 | Audience | Link |
 |----------|------|
 | **Users** | [docs/user/README.md](docs/user/README.md) - Installation, usage, examples |
+| **Commands** | [COMMANDS.md](COMMANDS.md) - Quick command and flag reference |
+| **Examples** | [EXAMPLES.md](EXAMPLES.md) - Copy-paste workflows for common use cases |
 | **AI Assistants** | [docs/AI/README.md](docs/AI/README.md) - Architecture, testing, common tasks |
 | **Transformations** | [doc/functions.md](doc/functions.md) - Function reference |
 
@@ -97,7 +104,7 @@ Move-Item -Path yankrun-windows-amd64.exe -Destination yankrun.exe
 </details>
 
 <details>
-<summary><strong>From Source (Go 1.24+)</strong></summary>
+<summary><strong>From Source (Go 1.25+)</strong></summary>
 
 ```sh
 go install github.com/AxeForging/yankrun@latest
@@ -277,6 +284,58 @@ Requires templates configured in `~/.yankrun/config.yaml` or GitHub discovery en
 
 The `generate` command caches GitHub-discovered repos and template variables in `~/.yankrun/cache.yaml`. Subsequent dry runs use cached data to avoid re-cloning. Use `--noCache` to bypass.
 
+
+</details>
+
+<details>
+<summary><strong>serve</strong> - Local web workbench</summary>
+
+```sh
+# Serve a local directory at http://127.0.0.1:17817
+yankrun serve --dir ./my-project --input values.yaml
+
+# Use a different bind address
+yankrun serve --dir ./my-project --addr 127.0.0.1:19090
+
+# Force preview-only mode
+yankrun serve --dir ./my-project --input values.yaml --dryRun
+```
+
+The workbench supports:
+
+- local scan, preview, and apply using the same replacement logic as `template`
+- clone from SSH or HTTPS repositories using the existing cloner/auth behavior
+- generate from configured templates and GitHub discovery
+- file-level placeholder trees and evaluated transform previews
+- local saved presets in IndexedDB, with JSON import/export
+
+**Flags:**
+
+| Flag | Alias | Description | Default |
+|------|-------|-------------|---------|
+| `--dir` | `-d` | Directory to scan/apply for local mode | - |
+| `--input` | `-i` | Values file (JSON/YAML) | - |
+| `--addr` | | Web listen address | `127.0.0.1:17817` |
+| `--startDelim` | `--sd` | Start delimiter | `[[` |
+| `--endDelim` | `--ed` | End delimiter | `]]` |
+| `--fileSizeLimit` | `--fl` | Skip files larger than | `3 mb` |
+| `--processTemplates` | `--pt` | Process `.tpl` files | `false` |
+| `--onlyTemplates` | `--ot` | Only process `.tpl` files | `false` |
+| `--dryRun` | `--dr` | Block writes and preview only | `false` |
+| `--ignore` | | Glob patterns to skip | - |
+| `--verbose` | `-v` | Verbose output | `false` |
+
+</details>
+
+<details>
+<summary><strong>tui</strong> - Safe terminal workflow</summary>
+
+```sh
+yankrun tui --dir ./my-project --input values.yaml
+yankrun tui --dir ./my-project --dryRun
+```
+
+The TUI scans a local directory, prints the discovered placeholders, previews the replacement count, and only writes when not in `--dryRun` mode.
 
 </details>
 

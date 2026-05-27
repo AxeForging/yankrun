@@ -56,7 +56,7 @@ func TestDryRunTemplate(t *testing.T) {
 
 func TestDryRunClone(t *testing.T) {
 	bin := buildBinary(t)
-	testDir := t.TempDir()
+	testDir := filepath.Join(t.TempDir(), "out")
 
 	// Create a local git repo to clone from
 	repoDir := t.TempDir()
@@ -64,7 +64,7 @@ func TestDryRunClone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command("git", "init")
+	cmd := exec.Command("git", "init", "-b", "main")
 	cmd.Dir = repoDir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init failed: %v\n%s", err, string(out))
@@ -105,13 +105,193 @@ func TestDryRunClone(t *testing.T) {
 		t.Errorf("expected 'Dry run' in output, got:\n%s", string(out))
 	}
 
-	// File should still have placeholder (dry run skips replacement)
-	got, err := os.ReadFile(filepath.Join(testDir, "readme.txt"))
+	// Clone dry-run should not leave output files behind.
+	if _, err := os.Stat(testDir); !os.IsNotExist(err) {
+		t.Fatalf("dry-run clone should not create output dir, stat err=%v", err)
+	}
+}
+
+func TestCloneBranchFlag(t *testing.T) {
+	bin := buildBinary(t)
+	outDir := filepath.Join(t.TempDir(), "out")
+	repoDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(repoDir, "readme.txt"), []byte("main branch"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "init", "-b", "main")
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, string(out))
+	}
+	cmd = exec.Command("git", "add", ".")
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add failed: %v\n%s", err, string(out))
+	}
+	cmd = exec.Command("git", "commit", "-m", "main")
+	cmd.Dir = repoDir
+	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit failed: %v\n%s", err, string(out))
+	}
+	cmd = exec.Command("git", "switch", "-c", "feature-template")
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git switch failed: %v\n%s", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "readme.txt"), []byte("feature [[NAME]]"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd = exec.Command("git", "add", ".")
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add failed: %v\n%s", err, string(out))
+	}
+	cmd = exec.Command("git", "commit", "-m", "feature")
+	cmd.Dir = repoDir
+	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit failed: %v\n%s", err, string(out))
+	}
+
+	valsPath := writeFile(t, t.TempDir(), "values.yaml", `variables: [{key: NAME, value: World}]`)
+	cmd = exec.Command(bin,
+		"clone",
+		"--repo", repoDir,
+		"--outputDir", outDir,
+		"--branch", "feature-template",
+		"--input", valsPath,
+	)
+	cmd.Dir = repoRoot(t)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("clone branch failed: %v\n%s", err, string(out))
+	}
+
+	got, err := os.ReadFile(filepath.Join(outDir, "readme.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(got), "[[NAME]]") {
-		t.Errorf("dry-run should not replace placeholders. Got: %q", string(got))
+	if string(got) != "feature World" {
+		t.Fatalf("readme.txt = %q, want feature branch content", string(got))
+	}
+}
+
+func TestGenerateDryRunDoesNotCreateOutput(t *testing.T) {
+	bin := buildBinary(t)
+	home := t.TempDir()
+	configDir := filepath.Join(home, ".yankrun")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	repoDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repoDir, "readme.txt"), []byte("Hello [[NAME]]"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "init", "-b", "main")
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, string(out))
+	}
+	cmd = exec.Command("git", "add", ".")
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add failed: %v\n%s", err, string(out))
+	}
+	cmd = exec.Command("git", "commit", "-m", "init")
+	cmd.Dir = repoDir
+	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit failed: %v\n%s", err, string(out))
+	}
+
+	config := "templates:\n  - name: local\n    url: " + repoDir + "\n    default_branch: main\n"
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	valsPath := writeFile(t, t.TempDir(), "values.yaml", `variables: [{key: NAME, value: World}]`)
+	outDir := filepath.Join(t.TempDir(), "generated")
+
+	cmd = exec.Command(bin,
+		"generate",
+		"--template", "local",
+		"--outputDir", outDir,
+		"--input", valsPath,
+		"--dryRun",
+	)
+	cmd.Dir = repoRoot(t)
+	cmd.Env = append(os.Environ(), "HOME="+home)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("generate dry-run failed: %v\n%s", err, string(out))
+	}
+	if !strings.Contains(string(out), "Dry run") {
+		t.Fatalf("expected dry-run output, got:\n%s", string(out))
+	}
+	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
+		t.Fatalf("generate dry-run should not create output dir, stat err=%v", err)
+	}
+}
+
+func TestTemplateUsesConfigDefaults(t *testing.T) {
+	bin := buildBinary(t)
+	home := t.TempDir()
+	configDir := filepath.Join(home, ".yankrun")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	config := "start_delim: '<%'\nend_delim: '%>'\nfile_size_limit: '1 mb'\n"
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	testDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(testDir, "app.txt"), []byte("App: <%NAME%>"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	valsPath := writeFile(t, t.TempDir(), "values.yaml", `variables: [{key: NAME, value: MyApp}]`)
+
+	cmd := exec.Command(bin, "template", "--dir", testDir, "--input", valsPath)
+	cmd.Dir = repoRoot(t)
+	cmd.Env = append(os.Environ(), "HOME="+home)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("template with config defaults failed: %v\n%s", err, string(out))
+	}
+
+	got, err := os.ReadFile(filepath.Join(testDir, "app.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "App: MyApp" {
+		t.Fatalf("app.txt = %q, want config delimiters to apply", string(got))
+	}
+}
+
+func TestTUIDryRunDoesNotModifyFiles(t *testing.T) {
+	bin := buildBinary(t)
+	testDir := t.TempDir()
+	path := filepath.Join(testDir, "app.txt")
+	if err := os.WriteFile(path, []byte("App: [[NAME]]"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	valsPath := writeFile(t, t.TempDir(), "values.yaml", `variables: [{key: NAME, value: MyApp}]`)
+
+	cmd := exec.Command(bin, "tui", "--dir", testDir, "--input", valsPath, "--dryRun")
+	cmd.Dir = repoRoot(t)
+	cmd.Stdin = strings.NewReader("\n")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("tui dry-run failed: %v\n%s", err, string(out))
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "App: [[NAME]]" {
+		t.Fatalf("tui dry-run modified file: %q", string(got))
 	}
 }
 

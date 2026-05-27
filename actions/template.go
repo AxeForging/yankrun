@@ -29,9 +29,6 @@ func (t *TemplateAction) Execute(c *cli.Context) error {
 	dir := c.String("dir")
 	verbose := c.Bool("verbose")
 	interactive := c.Bool("interactive")
-	startDelim := c.String("startDelim")
-	endDelim := c.String("endDelim")
-	fileSizeLimit := c.String("fileSizeLimit")
 	processTemplates := c.Bool("processTemplates")
 	onlyTemplates := c.Bool("onlyTemplates")
 	dryRun := c.Bool("dryRun")
@@ -51,24 +48,7 @@ func (t *TemplateAction) Execute(c *cli.Context) error {
 	if cfg == nil {
 		cfg = &domain.Config{}
 	}
-	if startDelim == "" && cfg.StartDelim != "" {
-		startDelim = cfg.StartDelim
-	}
-	if endDelim == "" && cfg.EndDelim != "" {
-		endDelim = cfg.EndDelim
-	}
-	if fileSizeLimit == "" && cfg.FileSizeLimit != "" {
-		fileSizeLimit = cfg.FileSizeLimit
-	}
-	if startDelim == "" {
-		startDelim = "[["
-	}
-	if endDelim == "" {
-		endDelim = "]]"
-	}
-	if fileSizeLimit == "" {
-		fileSizeLimit = "3 mb"
-	}
+	startDelim, endDelim, fileSizeLimit := templateSettings(c, cfg)
 
 	var parsed domain.InputReplacement
 	var err error

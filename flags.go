@@ -96,3 +96,9 @@ var sshKeyFlag = cli.StringFlag{
 	Value: "",
 	Usage: "Path to SSH private key (auto-detects id_ed25519, id_ecdsa, id_rsa if not set)",
 }
+
+var addrFlag = cli.StringFlag{
+	Name:  "addr",
+	Value: "127.0.0.1:17817",
+	Usage: "Address for the local serve command",
+}

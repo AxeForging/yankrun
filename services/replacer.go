@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"fmt"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -17,7 +18,21 @@ import (
 type Replacer interface {
 	ReplaceInDir(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error
 	AnalyzeDir(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) (map[string]int, error)
+	AnalyzeDirDetails(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) ([]ReplacementFile, error)
+	EvaluatePlaceholder(expression string, values map[string]string) (string, bool, error)
 	ProcessTemplateFiles(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error
+}
+
+type ReplacementFile struct {
+	Path         string                  `json:"path"`
+	Counts       map[string]int          `json:"counts"`
+	Placeholders []ReplacementOccurrence `json:"placeholders"`
+}
+
+type ReplacementOccurrence struct {
+	Key        string `json:"key"`
+	Expression string `json:"expression"`
+	Count      int    `json:"count"`
 }
 
 type FileReplacer struct {
@@ -30,12 +45,30 @@ func shouldIgnore(basePath, fullPath string, ignorePatterns []string) bool {
 	if err != nil {
 		return false
 	}
+	rel = filepath.ToSlash(rel)
+	base := path.Base(rel)
 	for _, pattern := range ignorePatterns {
-		if matched, _ := filepath.Match(pattern, rel); matched {
+		pattern = filepath.ToSlash(pattern)
+		if matched, _ := path.Match(pattern, rel); matched {
 			return true
 		}
-		if matched, _ := filepath.Match(pattern, filepath.Base(fullPath)); matched {
+		if matched, _ := path.Match(pattern, base); matched {
 			return true
+		}
+		if strings.HasSuffix(pattern, "/**") {
+			prefix := strings.TrimSuffix(pattern, "/**")
+			if rel == prefix || strings.HasPrefix(rel, prefix+"/") {
+				return true
+			}
+		}
+		if strings.HasPrefix(pattern, "**/") {
+			suffix := strings.TrimPrefix(pattern, "**/")
+			if matched, _ := path.Match(suffix, base); matched {
+				return true
+			}
+			if matched, _ := path.Match(suffix, rel); matched {
+				return true
+			}
 		}
 	}
 	return false
@@ -52,25 +85,62 @@ func (fr *FileReplacer) ReplaceInDir(dir string, replacements domain.InputReplac
 
 // AnalyzeDir returns a map of placeholder -> count discovered in files within size limit
 func (fr *FileReplacer) AnalyzeDir(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) (map[string]int, error) {
+	files, err := fr.AnalyzeDirDetails(dir, fileSizeLimit, startDelim, endDelim, onlyTemplates, ignorePatterns)
 	result := map[string]int{}
+	if err != nil {
+		return result, err
+	}
+	for _, file := range files {
+		for key, count := range file.Counts {
+			result[key] += count
+		}
+	}
+	return result, nil
+}
+
+func (fr *FileReplacer) AnalyzeDirDetails(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) ([]ReplacementFile, error) {
+	var result []ReplacementFile
 	fileSizeInBytes, err := fr.stringToBytes(fileSizeLimit)
 	if err != nil {
 		return result, err
 	}
-	err = fr.walkAndAnalyze(dir, dir, fileSizeInBytes, startDelim, endDelim, result, onlyTemplates, ignorePatterns)
+	err = fr.walkAndAnalyzeDetails(dir, dir, fileSizeInBytes, startDelim, endDelim, &result, onlyTemplates, ignorePatterns)
 	return result, err
 }
 
 func (fr *FileReplacer) walkAndAnalyze(dir string, basePath string, fileSizeInBytes int64, startDelim string, endDelim string, result map[string]int, onlyTemplates bool, ignorePatterns []string) error {
-	files, err := fr.FileSystem.ReadDir(dir)
+	files, err := fr.walkAndAnalyzeFiles(dir, basePath, fileSizeInBytes, startDelim, endDelim, onlyTemplates, ignorePatterns)
 	if err != nil {
 		return err
+	}
+	for _, file := range files {
+		for key, count := range file.Counts {
+			result[key] += count
+		}
+	}
+	return nil
+}
+
+func (fr *FileReplacer) walkAndAnalyzeDetails(dir string, basePath string, fileSizeInBytes int64, startDelim string, endDelim string, result *[]ReplacementFile, onlyTemplates bool, ignorePatterns []string) error {
+	files, err := fr.walkAndAnalyzeFiles(dir, basePath, fileSizeInBytes, startDelim, endDelim, onlyTemplates, ignorePatterns)
+	if err != nil {
+		return err
+	}
+	*result = append(*result, files...)
+	return nil
+}
+
+func (fr *FileReplacer) walkAndAnalyzeFiles(dir string, basePath string, fileSizeInBytes int64, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) ([]ReplacementFile, error) {
+	var result []ReplacementFile
+	files, err := fr.FileSystem.ReadDir(dir)
+	if err != nil {
+		return result, err
 	}
 	for _, file := range files {
 		path := fr.FileSystem.Join(dir, file.Name())
 		info, err := fr.FileSystem.Stat(path)
 		if err != nil {
-			return err
+			return result, err
 		}
 		if info.IsDir() {
 			// Skip common directories
@@ -81,9 +151,11 @@ func (fr *FileReplacer) walkAndAnalyze(dir string, basePath string, fileSizeInBy
 			if shouldIgnore(basePath, path, ignorePatterns) {
 				continue
 			}
-			if err := fr.walkAndAnalyze(path, basePath, fileSizeInBytes, startDelim, endDelim, result, onlyTemplates, ignorePatterns); err != nil {
-				return err
+			nested, err := fr.walkAndAnalyzeFiles(path, basePath, fileSizeInBytes, startDelim, endDelim, onlyTemplates, ignorePatterns)
+			if err != nil {
+				return result, err
 			}
+			result = append(result, nested...)
 			continue
 		}
 
@@ -100,12 +172,15 @@ func (fr *FileReplacer) walkAndAnalyze(dir string, basePath string, fileSizeInBy
 		}
 		content, err := fr.FileSystem.ReadFile(path)
 		if err != nil {
-			return err
+			return result, err
 		}
 		if isBinary(content) || isBinaryByExt(path) {
 			continue
 		}
 		text := string(content)
+		counts := map[string]int{}
+		expressionCounts := map[string]int{}
+		expressionKeys := map[string]string{}
 		// simple scan for startDelim ... endDelim occurrences
 		for {
 			start := strings.Index(text, startDelim)
@@ -125,11 +200,40 @@ func (fr *FileReplacer) walkAndAnalyze(dir string, basePath string, fileSizeInBy
 				text = text[end+len(endDelim):]
 				continue
 			}
-			result[baseKey] = result[baseKey] + 1
+			counts[baseKey] = counts[baseKey] + 1
+			expressionCounts[keyWithTransforms]++
+			expressionKeys[keyWithTransforms] = baseKey
 			text = text[end+len(endDelim):]
 		}
+		if len(counts) > 0 {
+			rel, err := filepath.Rel(basePath, path)
+			if err != nil {
+				rel = path
+			}
+			occurrences := make([]ReplacementOccurrence, 0, len(expressionCounts))
+			for expr, count := range expressionCounts {
+				occurrences = append(occurrences, ReplacementOccurrence{Key: expressionKeys[expr], Expression: expr, Count: count})
+			}
+			result = append(result, ReplacementFile{Path: filepath.ToSlash(rel), Counts: counts, Placeholders: occurrences})
+		}
 	}
-	return nil
+	return result, nil
+}
+
+func (fr *FileReplacer) EvaluatePlaceholder(expression string, values map[string]string) (string, bool, error) {
+	key, transformations, err := fr.parsePlaceholder(expression)
+	if err != nil {
+		return "", false, err
+	}
+	baseValue, ok := values[key]
+	if !ok || baseValue == "" {
+		return "", false, nil
+	}
+	finalValue, err := fr.applyTransformations(baseValue, transformations)
+	if err != nil {
+		return "", true, err
+	}
+	return finalValue, true, nil
 }
 
 // ProcessTemplateFiles processes .tpl files by evaluating templates and removing .tpl suffix
@@ -195,7 +299,7 @@ func (fr *FileReplacer) processTemplateFilesRecursive(dir string, basePath strin
 		// Process the template content
 		newContent := string(content)
 		numReplacements := 0
-		
+
 		// Create a map for quick lookup of replacement values by base key
 		replacementValues := make(map[string]string)
 		for _, r := range replacements.Variables {
@@ -247,9 +351,12 @@ func (fr *FileReplacer) processTemplateFilesRecursive(dir string, basePath strin
 
 		// Create new filename without .tpl suffix
 		newPath := strings.TrimSuffix(path, ".tpl")
-		
+		if _, err := fr.FileSystem.Stat(newPath); err == nil {
+			return fmt.Errorf("template target already exists: %s", newPath)
+		}
+
 		// Write the processed content to the new file
-		err = fr.FileSystem.WriteFile(newPath, []byte(newContent), 0644)
+		err = fr.FileSystem.WriteFile(newPath, []byte(newContent), info.Mode().Perm())
 		if err != nil {
 			return err
 		}
@@ -271,15 +378,24 @@ func (fr *FileReplacer) processTemplateFilesRecursive(dir string, basePath strin
 // parsePlaceholder extracts the base key and transformation functions from a placeholder string.
 // Example: "WORLD:gsub(WORLD,galaxy):toUpperCase" -> "WORLD", ["gsub(WORLD,galaxy)", "toUpperCase"]
 func (fr *FileReplacer) parsePlaceholder(placeholder string) (string, []string, error) {
+	if key, _, ok := strings.Cut(placeholder, "|default:"); ok {
+		placeholder = key
+	}
 	parts := strings.Split(placeholder, ":")
 	if len(parts) == 0 {
 		return "", nil, fmt.Errorf("empty placeholder")
 	}
 
-	baseKey := parts[0]
+	baseKey := strings.TrimSpace(parts[0])
+	if baseKey == "" {
+		return "", nil, fmt.Errorf("empty placeholder")
+	}
 	var transformations []string
 	if len(parts) > 1 {
-		transformations = parts[1:]
+		transformations = make([]string, 0, len(parts)-1)
+		for _, p := range parts[1:] {
+			transformations = append(transformations, strings.TrimSpace(p))
+		}
 	}
 	return baseKey, transformations, nil
 }
@@ -378,7 +494,7 @@ func (fr *FileReplacer) replacePatterns(dir string, basePath string, replacement
 			numReplacements++
 		}
 
-		err = fr.FileSystem.WriteFile(path, []byte(newContent), 0644)
+		err = fr.FileSystem.WriteFile(path, []byte(newContent), info.Mode().Perm())
 		if err != nil {
 			return err
 		}
@@ -397,11 +513,11 @@ func (fr *FileReplacer) applyTransformations(value string, transformations []str
 	for _, t := range transformations {
 		var err error
 		switch {
-		case strings.HasPrefix(t, "toUpperCase"):
+		case t == "toUpperCase":
 			transformedValue = strings.ToUpper(transformedValue)
-		case strings.HasPrefix(t, "toLowerCase"), strings.HasPrefix(t, "toDownCase"):
+		case t == "toLowerCase", t == "toDownCase":
 			transformedValue = strings.ToLower(transformedValue)
-		case strings.HasPrefix(t, "gsub("):
+		case strings.HasPrefix(t, "gsub(") && strings.HasSuffix(t, ")"):
 			transformedValue, err = fr.applyGsub(transformedValue, t)
 			if err != nil {
 				return "", err
@@ -416,8 +532,11 @@ func (fr *FileReplacer) applyTransformations(value string, transformations []str
 // applyGsub applies the gsub transformation.
 // It parses arguments like "gsub(old,new)" or "gsub( ,new)"
 func (fr *FileReplacer) applyGsub(value, transformFunc string) (string, error) {
+	if !strings.HasPrefix(transformFunc, "gsub(") || !strings.HasSuffix(transformFunc, ")") {
+		return "", fmt.Errorf("invalid gsub syntax: %s. Expected gsub(old,new)", transformFunc)
+	}
 	// Extract arguments from gsub(arg1,arg2)
-	argsStr := transformFunc[len("gsub("):strings.LastIndex(transformFunc, ")")]
+	argsStr := transformFunc[len("gsub(") : len(transformFunc)-1]
 
 	// Split arguments, handling escaped commas or commas within quotes if necessary
 	// For now, a simple split by comma, assuming no escaped commas or quotes

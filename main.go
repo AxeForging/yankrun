@@ -29,6 +29,8 @@ func main() {
 	templateAction := actions.NewTemplateAction(fs, parser, replacer)
 	cloneAction := actions.NewCloneAction(fs, parser, replacer, cloner)
 	generateAction := actions.NewGenerateAction(fs, cloner, parser, replacer)
+	serveAction := actions.NewServeAction(fs, parser, replacer, cloner)
+	tuiAction := actions.NewTUIAction(fs, parser, replacer)
 
 	app := cli.NewApp()
 	app.Name = "yankrun"
@@ -61,6 +63,18 @@ func main() {
 			Usage:  "Interactively choose a template repo/branch and clone it as a new repo (removes .git)",
 			Flags:  []cli.Flag{inputFlag, outputDirFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, interactiveFlag, templateNameFlag, branchFlag, processTemplatesFlag, onlyTemplatesFlag, dryRunFlag, ignoreFlag, noCacheFlag, sshKeyFlag},
 			Action: generateAction.Execute,
+		},
+		{
+			Name:   "tui",
+			Usage:  "Open a safe terminal workflow for templating a directory",
+			Flags:  []cli.Flag{inputFlag, dirFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, processTemplatesFlag, onlyTemplatesFlag, dryRunFlag, ignoreFlag},
+			Action: tuiAction.Execute,
+		},
+		{
+			Name:   "serve",
+			Usage:  "Run a local web UI for scanning, previewing, and applying template values",
+			Flags:  []cli.Flag{inputFlag, dirFlag, addrFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, processTemplatesFlag, onlyTemplatesFlag, dryRunFlag, ignoreFlag},
+			Action: serveAction.Execute,
 		},
 		{
 			Name:  "setup",

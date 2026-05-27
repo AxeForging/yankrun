@@ -31,9 +31,6 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 	// parse flags first for non-interactive allowance
 	interactivePrompt := c.Bool("interactive")
 	input := c.String("input")
-	startDelim := c.String("startDelim")
-	endDelim := c.String("endDelim")
-	fileSizeLimit := c.String("fileSizeLimit")
 	verbose := c.Bool("verbose")
 	outputDir := c.String("outputDir")
 	templateFilter := c.String("template")
@@ -76,25 +73,7 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		_ = services.Save(cfg)
 	}
 
-	// Fill defaults from config
-	if startDelim == "" && cfg.StartDelim != "" {
-		startDelim = cfg.StartDelim
-	}
-	if endDelim == "" && cfg.EndDelim != "" {
-		endDelim = cfg.EndDelim
-	}
-	if fileSizeLimit == "" && cfg.FileSizeLimit != "" {
-		fileSizeLimit = cfg.FileSizeLimit
-	}
-	if startDelim == "" {
-		startDelim = "[["
-	}
-	if endDelim == "" {
-		endDelim = "]]"
-	}
-	if fileSizeLimit == "" {
-		fileSizeLimit = "3 mb"
-	}
+	startDelim, endDelim, fileSizeLimit := templateSettings(c, cfg)
 
 	// Load cache
 	cache, _ := services.LoadCache()
@@ -279,7 +258,7 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		}
 	}
 
-	if outputDir == "" {
+	if outputDir == "" && !dryRun {
 		fmt.Printf("Output directory [./new-project]: ")
 		out, _ := r.ReadString('\n')
 		out = strings.TrimSpace(out)
@@ -289,20 +268,34 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		outputDir = out
 	}
 
-	if err := a.fs.EnsureDir(outputDir); err != nil {
-		return err
+	workDir := outputDir
+	if dryRun {
+		tmp, err := os.MkdirTemp("", "yankrun-generate-dryrun-*")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(tmp)
+		workDir = tmp
+	} else {
+		if err := a.fs.EnsureDir(outputDir); err != nil {
+			return err
+		}
 	}
 
-	if err := a.cloner.CloneRepositoryBranch(chosen.URL, br, outputDir); err != nil {
+	if err := a.cloner.CloneRepositoryBranch(chosen.URL, br, workDir); err != nil {
 		return err
 	}
-	helpers.Log.Info().Msgf("Cloned %s@%s into %s", chosen.Name, br, outputDir)
+	if dryRun {
+		helpers.Log.Info().Msgf("Cloned %s@%s into temporary directory for dry run", chosen.Name, br)
+	} else {
+		helpers.Log.Info().Msgf("Cloned %s@%s into %s", chosen.Name, br, outputDir)
+	}
 
 	// Get HEAD SHA before removing .git for cache
-	headSHA, _ := services.HeadSHA(outputDir)
+	headSHA, _ := services.HeadSHA(workDir)
 
 	// Remove .git directory to make it a fresh repo
-	gitDir := filepath.Join(outputDir, ".git")
+	gitDir := filepath.Join(workDir, ".git")
 	if err := os.RemoveAll(gitDir); err != nil {
 		return fmt.Errorf("failed to remove %s: %w", gitDir, err)
 	}
@@ -321,7 +314,7 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 	ignorePatterns := append(ignoreFlags, provided.IgnorePath...)
 
 	// Analyze placeholders
-	counts, err := a.replacer.AnalyzeDir(outputDir, fileSizeLimit, startDelim, endDelim, onlyTemplates, ignorePatterns)
+	counts, err := a.replacer.AnalyzeDir(workDir, fileSizeLimit, startDelim, endDelim, onlyTemplates, ignorePatterns)
 	if err != nil {
 		return err
 	}
@@ -406,14 +399,14 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 
 	// Skip regular templating if onlyTemplates is set
 	if !onlyTemplates {
-		if err := a.replacer.ReplaceInDir(outputDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
+		if err := a.replacer.ReplaceInDir(workDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
 			return err
 		}
 	}
 
 	// Process .tpl files if requested
 	if processTemplates {
-		if err := a.replacer.ProcessTemplateFiles(outputDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
+		if err := a.replacer.ProcessTemplateFiles(workDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
 			return err
 		}
 		helpers.Log.Info().Msg("Template file processing complete.")

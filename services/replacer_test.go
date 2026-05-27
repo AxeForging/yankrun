@@ -60,6 +60,8 @@ func TestParsePlaceholder(t *testing.T) {
 		{"APP_NAME", "APP_NAME", nil, false},
 		{"APP_NAME:toLowerCase", "APP_NAME", []string{"toLowerCase"}, false},
 		{"APP_NAME:gsub(-,_):toUpperCase", "APP_NAME", []string{"gsub(-,_)", "toUpperCase"}, false},
+		{"", "", nil, true},
+		{" :toUpperCase", "", nil, true},
 	}
 
 	for _, tt := range tests {
@@ -101,6 +103,8 @@ func TestApplyTransformations(t *testing.T) {
 		{"gsub", "hello world", []string{"gsub( ,-)"}, "hello-world", false},
 		{"chained", "Hello World", []string{"gsub( ,-)", "toLowerCase"}, "hello-world", false},
 		{"unsupported", "hello", []string{"capitalize"}, "", true},
+		{"malformed gsub", "hello", []string{"gsub(world,earth"}, "", true},
+		{"prefix is not accepted", "hello", []string{"toUpperCaseNow"}, "", true},
 	}
 
 	for _, tt := range tests {
@@ -136,6 +140,8 @@ func TestApplyGsub(t *testing.T) {
 		{"spaces to dashes", "hello world", "gsub( ,-)", "hello-world", false},
 		{"empty old replaces spaces", "hello world", "gsub(,_)", "hello_world", false},
 		{"invalid args", "hello", "gsub(only_one_arg)", "", true},
+		{"missing close paren", "hello", "gsub(world,earth", "", true},
+		{"missing open paren", "hello", "gsubworld,earth)", "", true},
 	}
 
 	for _, tt := range tests {
@@ -212,6 +218,8 @@ func TestShouldIgnore(t *testing.T) {
 	}{
 		{"no patterns", "/base", "/base/file.go", nil, false},
 		{"match basename", "/base", "/base/file.generated.go", []string{"*.generated.go"}, true},
+		{"match globstar directory", "/base", "/base/generated/deep/file.go", []string{"generated/**"}, true},
+		{"match globstar basename", "/base", "/base/subdir/file.lock", []string{"**/*.lock"}, true},
 		{"no match", "/base", "/base/file.go", []string{"*.generated.go"}, false},
 		{"empty patterns", "/base", "/base/file.go", []string{}, false},
 	}
@@ -234,12 +242,12 @@ type mockFileInfo struct {
 	modTime time.Time
 }
 
-func (m mockFileInfo) Name() string        { return m.name }
-func (m mockFileInfo) Size() int64         { return m.size }
-func (m mockFileInfo) Mode() fs.FileMode   { return m.mode }
-func (m mockFileInfo) IsDir() bool         { return m.dir }
-func (m mockFileInfo) Sys() interface{}    { return nil }
-func (m mockFileInfo) ModTime() time.Time  { return m.modTime }
+func (m mockFileInfo) Name() string       { return m.name }
+func (m mockFileInfo) Size() int64        { return m.size }
+func (m mockFileInfo) Mode() fs.FileMode  { return m.mode }
+func (m mockFileInfo) IsDir() bool        { return m.dir }
+func (m mockFileInfo) Sys() interface{}   { return nil }
+func (m mockFileInfo) ModTime() time.Time { return m.modTime }
 
 func TestCheckFileSize(t *testing.T) {
 	fr := &FileReplacer{}
@@ -286,6 +294,31 @@ func TestReplaceInDir(t *testing.T) {
 	expected := "Hello Alice, welcome to TestProject!"
 	if string(got) != expected {
 		t.Errorf("got %q, want %q", string(got), expected)
+	}
+}
+
+func TestReplaceInDirPreservesPermissions(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "script.sh")
+	if err := os.WriteFile(path, []byte("echo [[NAME]]"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	fr := &FileReplacer{FileSystem: &OsFileSystem{}}
+	replacements := domain.InputReplacement{
+		Variables: []domain.Replacement{{Key: "NAME", Value: "Alice"}},
+	}
+
+	if err := fr.ReplaceInDir(dir, replacements, "3 mb", "[[", "]]", false, nil); err != nil {
+		t.Fatalf("ReplaceInDir failed: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0755 {
+		t.Fatalf("mode = %o, want 755", got)
 	}
 }
 
@@ -456,6 +489,60 @@ Port: 8080`
 
 	if string(regularContent) != "This is a regular file" {
 		t.Error("Regular file should not have been modified")
+	}
+}
+
+func TestProcessTemplateFilesPreservesPermissions(t *testing.T) {
+	tempDir := t.TempDir()
+	tplFile := filepath.Join(tempDir, "script.sh.tpl")
+	if err := os.WriteFile(tplFile, []byte("echo [[NAME]]"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	replacer := &FileReplacer{FileSystem: &OsFileSystem{}}
+	replacements := domain.InputReplacement{
+		Variables: []domain.Replacement{{Key: "NAME", Value: "Alice"}},
+	}
+
+	if err := replacer.ProcessTemplateFiles(tempDir, replacements, "3 mb", "[[", "]]", false, nil); err != nil {
+		t.Fatalf("ProcessTemplateFiles failed: %v", err)
+	}
+
+	info, err := os.Stat(filepath.Join(tempDir, "script.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0755 {
+		t.Fatalf("mode = %o, want 755", got)
+	}
+}
+
+func TestProcessTemplateFilesErrorsWhenTargetExists(t *testing.T) {
+	tempDir := t.TempDir()
+	tplFile := filepath.Join(tempDir, "readme.md.tpl")
+	targetFile := filepath.Join(tempDir, "readme.md")
+	if err := os.WriteFile(tplFile, []byte("Hello [[NAME]]"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(targetFile, []byte("existing"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	replacer := &FileReplacer{FileSystem: &OsFileSystem{}}
+	replacements := domain.InputReplacement{
+		Variables: []domain.Replacement{{Key: "NAME", Value: "Alice"}},
+	}
+
+	if err := replacer.ProcessTemplateFiles(tempDir, replacements, "3 mb", "[[", "]]", false, nil); err == nil {
+		t.Fatal("expected error when template target already exists")
+	}
+
+	got, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "existing" {
+		t.Fatalf("target file was overwritten: %q", string(got))
 	}
 }
 
