@@ -60,10 +60,10 @@ jobs:
 
   review:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: AxeForging/reviewforge@main
+        continue-on-error: true
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AI_PROVIDER: gemini
