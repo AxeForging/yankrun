@@ -45,6 +45,7 @@ file_naming_pattern:
     - "*.png"
     - "*.jpg"
     - "*.svg"
+    - "*.gif"
     - "README*"
     - "LICENSE*"
     - "CHANGELOG*"
