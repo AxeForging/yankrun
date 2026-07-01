@@ -1,7 +1,7 @@
 # YankRun
 
 <div align="center">
-  <img src="doc/banner.png" alt="YankRun" width="400">
+  <img src="doc/yankrun-logo.png" alt="YankRun" width="400">
   <p>
     <img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?style=flat-square&logo=go" alt="Go Version">
     <img src="https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-darkblue?style=flat-square&logo=windows" alt="OS Support">
@@ -300,6 +300,8 @@ yankrun serve --dir ./my-project --addr 127.0.0.1:19090
 # Force preview-only mode
 yankrun serve --dir ./my-project --input values.yaml --dryRun
 ```
+
+![yankrun serve workbench: scan, fill placeholders, preview, apply](doc/serve-demo.gif)
 
 The workbench supports:
 
