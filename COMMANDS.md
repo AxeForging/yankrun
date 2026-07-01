@@ -96,6 +96,7 @@ Use `serve` when you want:
 - file-level placeholder trees
 - evaluated transform previews
 - idle refresh while editing values
+- edit the delimiter pair in the browser and rescan instantly, no restart
 - saved presets per repo/template in browser IndexedDB
 - JSON import/export for presets
 

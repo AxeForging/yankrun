@@ -1,7 +1,7 @@
 # YankRun
 
 <div align="center">
-  <img src="doc/banner.png" alt="YankRun" width="400">
+  <img src="doc/yankrun-logo.png" alt="YankRun" width="400">
   <p>
     <img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?style=flat-square&logo=go" alt="Go Version">
     <img src="https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-darkblue?style=flat-square&logo=windows" alt="OS Support">
@@ -10,6 +10,8 @@
 </div>
 
 **Template smarter**: Clone repos, replace tokens, or template existing projects — safely, with custom delimiters that won't clash with Helm, Jinja, or any other template language.
+
+![yankrun serve workbench: scan, fill placeholders, preview, apply](doc/serve-demo.gif)
 
 ## TL;DR
 
@@ -47,7 +49,7 @@ yankrun template --dir ./project --input values.yaml --startDelim "<%" --endDeli
 - **Transformation functions** (`toUpperCase`, `toLowerCase`, `gsub`)
 - **Template file processing** (`.tpl` files processed and renamed)
 - **Caching** for `generate` - caches GitHub repos and template variables in `~/.yankrun/cache.yaml`
-- **Interactive workbench** (`serve`) for local/clone/generate workflows with file trees, evaluated transform previews, saved presets, and JSON import/export
+- **Interactive workbench** (`serve`) for local/clone/generate workflows with file trees, evaluated transform previews, saved presets, JSON import/export, and in-browser custom delimiters
 - **Safe terminal workflow** (`tui`) for preview-first directory templating
 
 ## Documentation
@@ -301,12 +303,15 @@ yankrun serve --dir ./my-project --addr 127.0.0.1:19090
 yankrun serve --dir ./my-project --input values.yaml --dryRun
 ```
 
+See it in action in the demo GIF at the top of this README.
+
 The workbench supports:
 
 - local scan, preview, and apply using the same replacement logic as `template`
 - clone from SSH or HTTPS repositories using the existing cloner/auth behavior
 - generate from configured templates and GitHub discovery
 - file-level placeholder trees and evaluated transform previews
+- **custom delimiters from the browser** — edit the `[[` `]]` pair next to the directory path and click **Set** to rescan with a new pair, no restart required (still `--startDelim`/`--endDelim` to set the starting pair)
 - local saved presets in IndexedDB, with JSON import/export
 
 **Flags:**

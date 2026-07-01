@@ -110,6 +110,11 @@ type GenerateRequest struct {
 	DryRun    bool              `json:"dryRun"`
 }
 
+type DelimitersRequest struct {
+	StartDelim string `json:"startDelim"`
+	EndDelim   string `json:"endDelim"`
+}
+
 func New(opts Options) (*Server, error) {
 	page, err := loadTemplate()
 	if err != nil {
@@ -191,6 +196,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/templates", s.handleTemplates)
 	s.mux.HandleFunc("/api/clone", s.handleClone)
 	s.mux.HandleFunc("/api/generate", s.handleGenerate)
+	s.mux.HandleFunc("/api/delimiters", s.handleSetDelimiters)
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -198,11 +204,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	s.mu.Lock()
+	dir, startDelim, endDelim := s.dir, s.startDelim, s.endDelim
+	s.mu.Unlock()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = s.page.Execute(w, map[string]any{
-		"Dir":         s.dir,
-		"StartDelim":  s.startDelim,
-		"EndDelim":    s.endDelim,
+		"Dir":         dir,
+		"StartDelim":  startDelim,
+		"EndDelim":    endDelim,
 		"ForceDryRun": s.forceDryRun,
 	})
 }
@@ -257,6 +266,67 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, summary, nil)
+}
+
+func (s *Server) handleSetDelimiters(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+	var req DelimitersRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	summary, err := s.SetDelimiters(req.StartDelim, req.EndDelim)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, summary, nil)
+}
+
+// SetDelimiters swaps the active start/end delimiters and returns a fresh scan
+// of the current directory using them.
+func (s *Server) SetDelimiters(start, end string) (PlaceholderSummary, error) {
+	start, end, err := ValidateDelimiters(start, end)
+	if err != nil {
+		return PlaceholderSummary{}, err
+	}
+	s.mu.Lock()
+	s.startDelim = start
+	s.endDelim = end
+	s.mu.Unlock()
+	return s.Scan()
+}
+
+// ValidateDelimiters rejects delimiter pairs that would make scanning hang or
+// silently corrupt results, and returns the trimmed start/end pair to use.
+//
+// The literal scan (walkAndAnalyzeFiles in services/replacer.go) finds each
+// delimiter with strings.Index, which returns 0 without consuming any input
+// for an empty needle. If both delimiters were empty the scan loop would spin
+// forever on any non-empty file, hanging the request goroutine indefinitely -
+// so empty (or whitespace-only) delimiters are rejected outright. Requiring
+// start != end and that neither contains the other rules out the remaining
+// cases where the scan and regex-based replace paths would silently disagree
+// on where a placeholder begins and ends.
+func ValidateDelimiters(start, end string) (string, string, error) {
+	start = strings.TrimSpace(start)
+	end = strings.TrimSpace(end)
+	if start == "" || end == "" {
+		return "", "", fmt.Errorf("start and end delimiters are required")
+	}
+	if start == end {
+		return "", "", fmt.Errorf("start and end delimiters must be different")
+	}
+	if strings.Contains(start, end) || strings.Contains(end, start) {
+		return "", "", fmt.Errorf("start and end delimiters must not contain each other")
+	}
+	return start, end, nil
 }
 
 func (s *Server) Scan() (PlaceholderSummary, error) {
@@ -422,6 +492,8 @@ func writeJSON(w http.ResponseWriter, payload any, err error) {
 }
 
 func (s *Server) settings() workflow.TemplateSettings {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return workflow.TemplateSettings{
 		StartDelim:       s.startDelim,
 		EndDelim:         s.endDelim,

@@ -31,7 +31,15 @@
   <main class="shell">
     <section class="top">
       <div class="brand"><div class="mark">Y</div><div>YankRun Workbench</div></div>
-      <div class="pill">{{.Dir}} · {{.StartDelim}}KEY{{.EndDelim}}</div>
+      <div class="top-meta">
+        <div class="pill dir-pill">{{.Dir}}</div>
+        <form class="pill delim-form" id="delimForm" aria-label="Placeholder delimiters">
+          <input class="delim-input" id="delimStart" value="{{.StartDelim}}" size="3" aria-label="Start delimiter" autocomplete="off" spellcheck="false">
+          <span class="delim-key">KEY</span>
+          <input class="delim-input" id="delimEnd" value="{{.EndDelim}}" size="3" aria-label="End delimiter" autocomplete="off" spellcheck="false">
+          <button class="delim-set" id="delimSet" type="submit" title="Apply custom delimiters and rescan">Set</button>
+        </form>
+      </div>
     </section>
     <section class="grid">
       <div class="hero">

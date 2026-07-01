@@ -39,6 +39,8 @@ Open `http://127.0.0.1:17817`, then use:
 
 The workbench shows a file tree for each placeholder and evaluated transform previews such as `APP_NAME:toUpperCase -> TEMPLATETESTER`.
 
+If the repo uses a different delimiter pair, you don't need to restart the server: edit the `[[` `]]` pair shown next to the directory path and click **Set** to rescan with the new pair. It applies to Local, Clone, and Generate alike.
+
 ## Clone with SSH auth
 
 ```sh
