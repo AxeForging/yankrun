@@ -47,7 +47,7 @@ yankrun template --dir ./project --input values.yaml --startDelim "<%" --endDeli
 - **Transformation functions** (`toUpperCase`, `toLowerCase`, `gsub`)
 - **Template file processing** (`.tpl` files processed and renamed)
 - **Caching** for `generate` - caches GitHub repos and template variables in `~/.yankrun/cache.yaml`
-- **Interactive workbench** (`serve`) for local/clone/generate workflows with file trees, evaluated transform previews, saved presets, and JSON import/export
+- **Interactive workbench** (`serve`) for local/clone/generate workflows with file trees, evaluated transform previews, saved presets, JSON import/export, and in-browser custom delimiters
 - **Safe terminal workflow** (`tui`) for preview-first directory templating
 
 ## Documentation
@@ -309,6 +309,7 @@ The workbench supports:
 - clone from SSH or HTTPS repositories using the existing cloner/auth behavior
 - generate from configured templates and GitHub discovery
 - file-level placeholder trees and evaluated transform previews
+- **custom delimiters from the browser** — edit the `[[` `]]` pair next to the directory path and click **Set** to rescan with a new pair, no restart required (still `--startDelim`/`--endDelim` to set the starting pair)
 - local saved presets in IndexedDB, with JSON import/export
 
 **Flags:**

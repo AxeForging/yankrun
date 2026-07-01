@@ -5,6 +5,9 @@ const cloneRepo = document.querySelector("#cloneRepo");
 const templateSelect = document.querySelector("#templateSelect");
 const savedRunsList = document.querySelector("#savedRunsList");
 const presetSearch = document.querySelector("#presetSearch");
+const delimForm = document.querySelector("#delimForm");
+const delimStart = document.querySelector("#delimStart");
+const delimEnd = document.querySelector("#delimEnd");
 let summary = { keys: [], counts: {}, values: {} };
 let repoType = "ssh";
 let activeMode = "local";
@@ -220,6 +223,22 @@ async function apply(dryRun) {
   }
 }
 
+async function setDelimiters(e) {
+  e.preventDefault();
+  const start = delimStart.value;
+  const end = delimEnd.value;
+  setBusy("updating delimiters");
+  try {
+    summary = await postJSON("/api/delimiters", { startDelim: start, endDelim: end });
+    render();
+    show("Delimiters set to " + start.trim() + "KEY" + end.trim() + ". Rescanned with the new pair.", "ok");
+  } catch (err) {
+    show(err.message || "Failed to set delimiters", "err");
+  } finally {
+    setReady();
+  }
+}
+
 function scheduleEvaluate() {
   clearTimeout(evaluateTimer);
   statusEl.textContent = "editing";
@@ -399,6 +418,7 @@ document.querySelectorAll("[data-preset-filter]").forEach(b => b.addEventListene
   renderSavedRuns();
 }));
 presetSearch.addEventListener("input", renderSavedRuns);
+delimForm.addEventListener("submit", setDelimiters);
 document.querySelector("#refresh").addEventListener("click", scan);
 document.querySelector("#preview").addEventListener("click", () => apply(true));
 document.querySelector("#apply").addEventListener("click", () => apply(false));

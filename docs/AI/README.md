@@ -82,7 +82,7 @@ User Command → main.go → actions/*.go → internal/workflow → services/*.g
 | `services/cloner.go` | Git clone operations | `CloneRepository()`, `CloneRepositoryBranch()` |
 | `services/configio.go` | Config file management | `Load()`, `Save()`, `Reset()` |
 | `internal/workflow/workflow.go` | Shared workflow used by CLI/TUI/web | `ScanDir()`, `ApplyDir()`, `CloneAndApply()` |
-| `internal/web/server.go` | Embedded local workbench API | `Scan()`, `Apply()`, `Clone()`, `Generate()` |
+| `internal/web/server.go` | Embedded local workbench API | `Scan()`, `Apply()`, `Clone()`, `Generate()`, `SetDelimiters()`, `ValidateDelimiters()` |
 | `internal/tui/tui.go` | Preview-first terminal workflow | `Run()` |
 | `actions/clone.go` | Clone command handler | `Execute()` |
 | `actions/template.go` | Template command handler | `Execute()` |
@@ -92,6 +92,7 @@ User Command → main.go → actions/*.go → internal/workflow → services/*.g
 - `serve` embeds `internal/web/templates` and `internal/web/static` into the single binary.
 - The web UI supports local scan/apply, direct clone, and generate from configured templates.
 - Preview responses include file-level placeholder trees and evaluated transform previews.
+- `POST /api/delimiters` lets the browser change the active start/end delimiter pair at runtime (`Server.SetDelimiters`); it validates with `ValidateDelimiters` (rejects empty, equal, or mutually-containing pairs — an empty pair would otherwise hang the literal scan in `services/replacer.go`), updates `Server.startDelim`/`endDelim` under `Server.mu`, and returns a fresh scan. The new pair applies to Local, Clone, and Generate alike since they all read it from the same `Server.settings()`.
 - Browser IndexedDB stores saved presets locally; JSON import/export is client-side only.
 - `tui` uses the same workflow engine for local directory scan/apply and remains preview-first.
 

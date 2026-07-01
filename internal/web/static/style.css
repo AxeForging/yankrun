@@ -9,6 +9,12 @@ body{margin:0;background:radial-gradient(circle at 12% 10%,#fff1eb 0,#fff7f3 26%
 .brand{display:flex;align-items:center;gap:12px;font-weight:850;letter-spacing:-.02em}
 .mark{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#ff5a24,#f03716);display:grid;place-items:center;color:white;font-weight:900;box-shadow:0 18px 30px -18px rgba(255,90,36,.9)}
 .pill{border:1px solid var(--line);background:rgba(255,255,255,.72);backdrop-filter:blur(14px);border-radius:999px;padding:10px 14px;color:var(--muted);font-size:13px}
+.top-meta{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.delim-form{display:inline-flex;align-items:center;gap:6px;margin:0}
+.delim-input{width:52px;padding:5px 8px;font-size:12px;text-align:center;border-radius:8px}
+.delim-key{color:var(--muted);font-size:12px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
+.delim-set{border:1px solid var(--line);background:white;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--ink);cursor:pointer}
+.delim-set:hover{border-color:#ff8a63;color:var(--brand-dark)}
 .grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(320px,.72fr);gap:24px;align-items:start}
 .hero{padding:18px 0}
 .eyebrow{display:inline-flex;gap:8px;align-items:center;border:1px solid #ffd6c7;background:#fff7f2;color:#9f3418;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}

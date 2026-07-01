@@ -348,6 +348,7 @@ The workbench provides:
 - file-level placeholder trees so you can see what will change
 - evaluated transform previews, for example `APP_NAME:toUpperCase -> MYAPP`
 - idle refresh after value edits so previews stay current
+- editable delimiters in the browser — change the `[[` `]]` pair shown next to the directory path and click **Set** to rescan the whole workbench (Local, Clone, and Generate) with the new pair, no restart needed
 - saved presets stored in browser IndexedDB, searchable by repo/template/branch/output/value keys
 - preset JSON export/import for moving saved runs between browsers
 
@@ -372,9 +373,12 @@ Typical flow:
 
 1. Start the server with an optional local directory and values file.
 2. Use **Local**, **Clone**, or **Generate** mode.
-3. Click **Preview** before applying.
-4. Edit values; evaluated previews refresh after a short idle delay.
-5. Restore prior work from the left preset rail when repeating a repo/template.
+3. If your files use a different delimiter pair, edit it next to the directory path and click **Set** to rescan — no restart needed.
+4. Click **Preview** before applying.
+5. Edit values; evaluated previews refresh after a short idle delay.
+6. Restore prior work from the left preset rail when repeating a repo/template.
+
+Delimiters set from the browser apply to every mode (Local, Clone, Generate) for the rest of the session; a rejected change (empty, identical, or overlapping delimiters) leaves the previous pair active and shows the reason in the notice banner.
 
 For clone mode:
 
