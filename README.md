@@ -11,6 +11,8 @@
 
 **Template smarter**: Clone repos, replace tokens, or template existing projects — safely, with custom delimiters that won't clash with Helm, Jinja, or any other template language.
 
+![yankrun serve workbench: scan, fill placeholders, preview, apply](doc/serve-demo.gif)
+
 ## TL;DR
 
 ```sh
@@ -301,7 +303,7 @@ yankrun serve --dir ./my-project --addr 127.0.0.1:19090
 yankrun serve --dir ./my-project --input values.yaml --dryRun
 ```
 
-![yankrun serve workbench: scan, fill placeholders, preview, apply](doc/serve-demo.gif)
+See it in action in the demo GIF at the top of this README.
 
 The workbench supports:
 
