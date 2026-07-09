@@ -31,10 +31,8 @@ func PrintScanSummary(w io.Writer, s workflow.Summary) {
 }
 
 // PrintApplyResult renders the outcome of an apply (or dry run): totals plus a
-// terminal status line.
+// terminal status line. Callers print the placeholder summary separately.
 func PrintApplyResult(w io.Writer, r workflow.ApplyResult, dryRun bool) {
-	PrintScanSummary(w, r.Summary)
-	fmt.Fprintln(w)
 	totals := fmt.Sprintf("%d replacement%s across %d placeholder%s",
 		r.TotalMatches, plural(r.TotalMatches), r.Placeholders, plural(r.Placeholders))
 	switch {

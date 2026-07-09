@@ -38,6 +38,7 @@ type FileSummary struct {
 	Path     string         `json:"path"`
 	Counts   map[string]int `json:"counts"`
 	Previews []ValuePreview `json:"previews"`
+	Diff     string         `json:"diff,omitempty"`
 }
 
 type ValuePreview struct {
@@ -156,6 +157,9 @@ func (e Engine) ApplyDir(dir string, settings TemplateSettings, provided domain.
 		Summary:      summary,
 	}
 	if dryRun || forceDryRun || len(final.Variables) == 0 {
+		// Preview mode: attach per-file diffs so callers can show exactly what
+		// would change without writing anything.
+		e.attachDiffs(dir, settings, &result.Summary, final)
 		return result, nil
 	}
 	if err := e.ApplyFinal(dir, settings, final); err != nil {

@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/AxeForging/yankrun/domain"
 	"github.com/AxeForging/yankrun/helpers"
+	"github.com/AxeForging/yankrun/internal/schema"
+	"github.com/AxeForging/yankrun/internal/workflow"
 	"github.com/AxeForging/yankrun/services"
 	"github.com/urfave/cli/v3"
 )
@@ -26,46 +27,61 @@ func NewGenerateAction(fs services.FileSystem, cloner services.Cloner, parser se
 	return &GenerateAction{fs: fs, cloner: cloner, parser: parser, replacer: replacer}
 }
 
-// Execute: choose template repo/branch, clone, remove .git, then optionally prompt and apply replacements
+// Execute: choose template repo/branch, clone, remove .git, then resolve and
+// apply replacements. Supports --json for a machine-readable envelope.
 func (a *GenerateAction) Execute(_ context.Context, cmd *cli.Command) error {
-	// parse flags first for non-interactive allowance
+	jsonOut := cmd.Bool("json")
+	if jsonOut {
+		helpers.SetupLogger("warn")
+	}
+
+	result, manifest, dryRun, err := a.run(cmd)
+
+	if jsonOut {
+		return schema.Emit(os.Stdout, "generate", result, err)
+	}
+	if err != nil {
+		return err
+	}
+	printApply(result, manifest, dryRun)
+	return nil
+}
+
+func (a *GenerateAction) run(cmd *cli.Command) (workflow.ApplyResult, *domain.Manifest, bool, error) {
 	interactivePrompt := cmd.Bool("interactive")
+	jsonOut := cmd.Bool("json")
 	input := cmd.String("input")
-	verbose := cmd.Bool("verbose")
 	outputDir := cmd.String("outputDir")
 	templateFilter := cmd.String("template")
 	branchFlag := cmd.String("branch")
-	processTemplates := cmd.Bool("processTemplates")
-	onlyTemplates := cmd.Bool("onlyTemplates")
 	dryRun := cmd.Bool("dryRun")
-	ignoreFlags := cmd.StringSlice("ignore")
 	noCache := cmd.Bool("noCache")
 
+	// interactiveAllowed gates every prompt so --json, --yes, and non-TTY runs
+	// never block waiting for input.
+	interactiveAllowed := interactivePrompt && !jsonOut && !cmd.Bool("yes") && helpers.IsInteractive()
+
+	if cmd.Bool("onlyTemplates") && !cmd.Bool("processTemplates") {
+		return workflow.ApplyResult{}, nil, dryRun, helpers.UsageErr("--onlyTemplates requires --processTemplates to be set")
+	}
 	if sshKey := cmd.String("ssh-key"); sshKey != "" {
 		a.cloner.SetSSHKeyPath(sshKey)
 	}
 
-	// Validate flag combination
-	if onlyTemplates && !processTemplates {
-		return helpers.UsageErr("--onlyTemplates requires --processTemplates to be set")
-	}
-
 	cfg, err := services.Load()
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return workflow.ApplyResult{}, nil, dryRun, fmt.Errorf("failed to load config: %w", err)
 	}
-	if len(cfg.Templates) == 0 && cfg.GitHub.User == "" && len(cfg.GitHub.Orgs) == 0 && templateFilter == "" {
-		// Ask minimal discovery setup inline
+	if len(cfg.Templates) == 0 && cfg.GitHub.User == "" && len(cfg.GitHub.Orgs) == 0 && templateFilter == "" && interactiveAllowed {
+		// Minimal discovery setup, only when we can actually prompt.
 		r := bufio.NewReader(os.Stdin)
 		fmt.Println("No templates configured. Let's set where to search:")
 		u := strings.TrimSpace(promptString(r, "GitHub user (optional, Enter to skip)", ""))
 		orgsCSV := strings.TrimSpace(promptString(r, "GitHub orgs (comma-separated, optional)", ""))
 		var orgs []string
-		if orgsCSV != "" {
-			for _, p := range strings.Split(orgsCSV, ",") {
-				if s := strings.TrimSpace(p); s != "" {
-					orgs = append(orgs, s)
-				}
+		for _, p := range strings.Split(orgsCSV, ",") {
+			if s := strings.TrimSpace(p); s != "" {
+				orgs = append(orgs, s)
 			}
 		}
 		cfg.GitHub.User = u
@@ -75,15 +91,10 @@ func (a *GenerateAction) Execute(_ context.Context, cmd *cli.Command) error {
 
 	startDelim, endDelim, fileSizeLimit := templateSettings(cmd, cfg)
 
-	// Load cache
 	cache, _ := services.LoadCache()
 	cacheUpdated := false
 
-	r := bufio.NewReader(os.Stdin)
-
-	// Aggregate configured repos + discovered GitHub repos
 	repos := cfg.Templates
-	// Allow direct URL via --template for non-interactive shortcut
 	if templateFilter != "" && (strings.Contains(templateFilter, "://") || strings.HasPrefix(templateFilter, "git@")) {
 		repos = append(repos, domain.TemplateRepo{Name: templateFilter, URL: templateFilter, DefaultBranch: "main"})
 	}
@@ -100,9 +111,7 @@ func (a *GenerateAction) Execute(_ context.Context, cmd *cli.Command) error {
 			}
 			var ghRepos []domain.TemplateRepo
 			for _, fr := range found {
-				tr := domain.TemplateRepo{
-					Name: fr.FullName, URL: fr.SSHURL, Description: fr.Description, DefaultBranch: fr.DefaultBranch,
-				}
+				tr := domain.TemplateRepo{Name: fr.FullName, URL: fr.SSHURL, Description: fr.Description, DefaultBranch: fr.DefaultBranch}
 				repos = append(repos, tr)
 				ghRepos = append(ghRepos, tr)
 			}
@@ -112,14 +121,99 @@ func (a *GenerateAction) Execute(_ context.Context, cmd *cli.Command) error {
 		}
 	}
 	if len(repos) == 0 {
-		return helpers.NotFoundErr("no templates configured or found")
+		return workflow.ApplyResult{}, nil, dryRun, helpers.NotFoundErr("no templates configured or found")
 	}
 
-	// Build filtered set non-interactively first
+	chosen, err := a.selectTemplate(repos, templateFilter, interactivePrompt, interactiveAllowed)
+	if err != nil {
+		return workflow.ApplyResult{}, nil, dryRun, err
+	}
+
+	br := a.selectBranch(chosen, branchFlag, interactivePrompt, interactiveAllowed)
+
+	if outputDir == "" && !dryRun {
+		if interactiveAllowed {
+			r := bufio.NewReader(os.Stdin)
+			fmt.Printf("Output directory [./new-project]: ")
+			out, _ := r.ReadString('\n')
+			if out = strings.TrimSpace(out); out == "" {
+				out = "./new-project"
+			}
+			outputDir = out
+		} else {
+			return workflow.ApplyResult{}, nil, dryRun, helpers.UsageErr("--outputDir is required for non-interactive generate")
+		}
+	}
+
+	workDir := outputDir
+	if dryRun {
+		tmp, err := os.MkdirTemp("", "yankrun-generate-dryrun-*")
+		if err != nil {
+			return workflow.ApplyResult{}, nil, dryRun, err
+		}
+		defer os.RemoveAll(tmp)
+		workDir = tmp
+	} else if err := a.fs.EnsureDir(outputDir); err != nil {
+		return workflow.ApplyResult{}, nil, dryRun, err
+	}
+
+	if err := a.cloner.CloneRepositoryBranch(chosen.URL, br, workDir); err != nil {
+		return workflow.ApplyResult{}, nil, dryRun, helpers.GitErr(err)
+	}
+	if dryRun {
+		helpers.Log.Info().Msgf("Cloned %s@%s into a temporary directory for dry run", chosen.Name, br)
+	} else {
+		helpers.Log.Info().Msgf("Cloned %s@%s into %s", chosen.Name, br, outputDir)
+	}
+
+	headSHA, _ := services.HeadSHA(workDir)
+	if err := os.RemoveAll(filepath.Join(workDir, ".git")); err != nil {
+		return workflow.ApplyResult{}, nil, dryRun, fmt.Errorf("failed to remove .git: %w", err)
+	}
+	helpers.Log.Info().Msg("Removed .git directory (new repo initialized)")
+
+	provided, err := parseInput(a.parser, input)
+	if err != nil {
+		return workflow.ApplyResult{}, nil, dryRun, err
+	}
+
+	engine := workflow.Engine{Parser: a.parser, Replacer: a.replacer, Cloner: a.cloner}
+	result, manifest, err := runApply(engine, applyOptions{
+		dir:      workDir,
+		provided: provided,
+		settings: workflow.TemplateSettings{
+			StartDelim:       startDelim,
+			EndDelim:         endDelim,
+			FileSizeLimit:    fileSizeLimit,
+			ProcessTemplates: cmd.Bool("processTemplates"),
+			OnlyTemplates:    cmd.Bool("onlyTemplates"),
+			Verbose:          cmd.Bool("verbose"),
+			IgnorePatterns:   append(cmd.StringSlice("ignore"), provided.IgnorePath...),
+		},
+		interactive: interactiveAllowed,
+		dryRun:      dryRun,
+	})
+	if err != nil {
+		return workflow.ApplyResult{}, manifest, dryRun, err
+	}
+
+	// Refresh the discovered-variables cache from the scan counts.
+	if headSHA != "" && len(result.Summary.Counts) > 0 {
+		services.UpdateVars(cache, chosen.URL, br, headSHA, result.Summary.Counts)
+		cacheUpdated = true
+	}
+	if cacheUpdated {
+		_ = services.SaveCache(cache)
+	}
+	return result, manifest, dryRun, nil
+}
+
+// selectTemplate resolves the template to use, prompting only when allowed.
+func (a *GenerateAction) selectTemplate(repos []domain.TemplateRepo, filter string, interactivePrompt, interactiveAllowed bool) (domain.TemplateRepo, error) {
 	var filtered []domain.TemplateRepo
-	if templateFilter != "" {
+	if filter != "" {
 		for _, t := range repos {
-			if strings.Contains(strings.ToLower(t.Name), strings.ToLower(templateFilter)) || strings.Contains(strings.ToLower(t.URL), strings.ToLower(templateFilter)) {
+			if strings.Contains(strings.ToLower(t.Name), strings.ToLower(filter)) || strings.Contains(strings.ToLower(t.URL), strings.ToLower(filter)) {
 				filtered = append(filtered, t)
 			}
 		}
@@ -127,299 +221,111 @@ func (a *GenerateAction) Execute(_ context.Context, cmd *cli.Command) error {
 		filtered = repos
 	}
 	if len(filtered) == 0 {
-		return helpers.NotFoundErr("no templates matched filter")
+		return domain.TemplateRepo{}, helpers.NotFoundErr("no templates matched filter")
 	}
 
-	var chosen domain.TemplateRepo
-	if !interactivePrompt && (templateFilter != "" && len(filtered) >= 1) {
-		chosen = filtered[0]
-	} else {
-		helpers.Log.Info().Msg("Available templates:")
-		for i, t := range repos {
-			fmt.Printf("  [%d] %s  (%s)\n", i+1, t.Name, t.URL)
-		}
-		fmt.Printf("Filter templates by substring (press Enter to skip): ")
-		filter, _ := r.ReadString('\n')
-		filter = strings.TrimSpace(filter)
-		filtered = nil
-		if filter == "" {
-			filtered = repos
-		} else {
-			for _, t := range repos {
-				if strings.Contains(strings.ToLower(t.Name), strings.ToLower(filter)) || strings.Contains(strings.ToLower(t.URL), strings.ToLower(filter)) {
-					filtered = append(filtered, t)
-				}
+	switch {
+	case filter != "" && !interactivePrompt:
+		return filtered[0], nil
+	case interactiveAllowed:
+		return a.promptTemplate(repos), nil
+	case len(filtered) == 1:
+		return filtered[0], nil
+	default:
+		return domain.TemplateRepo{}, helpers.UsageErr("--template is required to select a template non-interactively")
+	}
+}
+
+// promptTemplate runs the interactive template picker.
+func (a *GenerateAction) promptTemplate(repos []domain.TemplateRepo) domain.TemplateRepo {
+	r := bufio.NewReader(os.Stdin)
+	helpers.Log.Info().Msg("Available templates:")
+	for i, t := range repos {
+		fmt.Printf("  [%d] %s  (%s)\n", i+1, t.Name, t.URL)
+	}
+	fmt.Printf("Filter templates by substring (press Enter to skip): ")
+	filter, _ := r.ReadString('\n')
+	filter = strings.TrimSpace(filter)
+	filtered := repos
+	if filter != "" {
+		var match []domain.TemplateRepo
+		for _, t := range repos {
+			if strings.Contains(strings.ToLower(t.Name), strings.ToLower(filter)) || strings.Contains(strings.ToLower(t.URL), strings.ToLower(filter)) {
+				match = append(match, t)
 			}
-			if len(filtered) == 0 {
-				filtered = repos
-			}
 		}
-		for i, t := range filtered {
-			fmt.Printf("  [%d] %s  (%s)\n", i+1, t.Name, t.URL)
+		if len(match) > 0 {
+			filtered = match
 		}
-		fmt.Printf("Select template [1-%d]: ", len(filtered))
-		selStr, _ := r.ReadString('\n')
-		selStr = strings.TrimSpace(selStr)
-		idx := 0
-		if selStr != "" {
-			fmt.Sscanf(selStr, "%d", &idx)
-			idx--
+	}
+	for i, t := range filtered {
+		fmt.Printf("  [%d] %s  (%s)\n", i+1, t.Name, t.URL)
+	}
+	fmt.Printf("Select template [1-%d]: ", len(filtered))
+	selStr, _ := r.ReadString('\n')
+	idx := 0
+	if selStr = strings.TrimSpace(selStr); selStr != "" {
+		fmt.Sscanf(selStr, "%d", &idx)
+		idx--
+	}
+	if idx < 0 || idx >= len(filtered) {
+		idx = 0
+	}
+	return filtered[idx]
+}
+
+// selectBranch resolves the branch, prompting only when allowed.
+func (a *GenerateAction) selectBranch(chosen domain.TemplateRepo, branchFlag string, interactivePrompt, interactiveAllowed bool) string {
+	if !interactivePrompt || !interactiveAllowed {
+		switch {
+		case branchFlag != "":
+			return branchFlag
+		case chosen.DefaultBranch != "":
+			return chosen.DefaultBranch
+		default:
+			return "main"
 		}
-		if idx < 0 || idx >= len(filtered) {
-			idx = 0
-		}
-		chosen = filtered[idx]
 	}
 
-	// Retrieve branches from remote and allow filtering by substring as user types
 	branches, _ := a.cloner.ListRemoteBranches(chosen.URL)
 	if len(branches) == 0 && chosen.DefaultBranch != "" {
 		branches = []string{chosen.DefaultBranch}
 	}
-	// Non-interactive branch selection via flag
-	var br string
-	if !interactivePrompt {
-		if branchFlag != "" {
-			br = branchFlag
-		} else if chosen.DefaultBranch != "" {
-			br = chosen.DefaultBranch
-		} else {
-			br = "main"
-		}
-	} else {
-		fmt.Printf("Type to filter branches (Enter to accept default [%s]): ", chosen.DefaultBranch)
-		branchFilter, _ := r.ReadString('\n')
-		branchFilter = strings.TrimSpace(branchFilter)
-		var candidates []string
-		if branchFilter == "" {
-			candidates = branches
-		} else {
-			for _, b := range branches {
-				if strings.Contains(strings.ToLower(b), strings.ToLower(branchFilter)) {
-					candidates = append(candidates, b)
-				}
-			}
-			if len(candidates) == 0 {
-				candidates = branches
+	r := bufio.NewReader(os.Stdin)
+	fmt.Printf("Type to filter branches (Enter to accept default [%s]): ", chosen.DefaultBranch)
+	branchFilter, _ := r.ReadString('\n')
+	branchFilter = strings.TrimSpace(branchFilter)
+	candidates := branches
+	if branchFilter != "" {
+		var match []string
+		for _, b := range branches {
+			if strings.Contains(strings.ToLower(b), strings.ToLower(branchFilter)) {
+				match = append(match, b)
 			}
 		}
-		fmt.Println("Available branches:")
-		for i, b := range candidates {
-			fmt.Printf("  [%d] %s\n", i+1, b)
-		}
-		fmt.Printf("Select branch [1-%d] (Enter for default): ", len(candidates))
-		pick, _ := r.ReadString('\n')
-		pick = strings.TrimSpace(pick)
-		br = chosen.DefaultBranch
-		if pick != "" {
-			var idx int
-			if _, err := fmt.Sscanf(pick, "%d", &idx); err == nil && idx >= 1 && idx <= len(candidates) {
-				br = candidates[idx-1]
-			}
+		if len(match) > 0 {
+			candidates = match
 		}
 	}
-
-	// Dry-run with cache: show cached variables without cloning
-	if dryRun && !noCache {
-		if cached, ok := services.LookupVars(cache, chosen.URL, br); ok {
-			var provided domain.InputReplacement
-			if input != "" {
-				provided, _ = a.parser.Parse(input)
-			}
-			values := map[string]string{}
-			for _, rpl := range provided.Variables {
-				values[rpl.Key] = rpl.Value
-			}
-
-			helpers.Log.Info().Msgf("Using cached template data (SHA: %s)", cached.SHA)
-			helpers.Log.Info().Msg("Discovered placeholders:")
-			keys := make([]string, 0, len(cached.Variables))
-			for k := range cached.Variables {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-			for _, k := range keys {
-				v := values[k]
-				if v == "" {
-					v = "(unset)"
-				}
-				fmt.Printf("  %-24s  matches=%-6d  value=%s\n", k, cached.Variables[k], v)
-			}
-
-			totalMatches := 0
-			for _, c := range cached.Variables {
-				totalMatches += c
-			}
-			helpers.Log.Info().Msgf("Dry run (cached): %d placeholders with %d total matches. No files modified.", len(cached.Variables), totalMatches)
-			if cacheUpdated {
-				_ = services.SaveCache(cache)
-			}
-			return nil
+	fmt.Println("Available branches:")
+	for i, b := range candidates {
+		fmt.Printf("  [%d] %s\n", i+1, b)
+	}
+	fmt.Printf("Select branch [1-%d] (Enter for default): ", len(candidates))
+	pick, _ := r.ReadString('\n')
+	if pick = strings.TrimSpace(pick); pick != "" {
+		var idx int
+		if _, err := fmt.Sscanf(pick, "%d", &idx); err == nil && idx >= 1 && idx <= len(candidates) {
+			return candidates[idx-1]
 		}
 	}
-
-	if outputDir == "" && !dryRun {
-		fmt.Printf("Output directory [./new-project]: ")
-		out, _ := r.ReadString('\n')
-		out = strings.TrimSpace(out)
-		if out == "" {
-			out = "./new-project"
-		}
-		outputDir = out
+	if chosen.DefaultBranch != "" {
+		return chosen.DefaultBranch
 	}
-
-	workDir := outputDir
-	if dryRun {
-		tmp, err := os.MkdirTemp("", "yankrun-generate-dryrun-*")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(tmp)
-		workDir = tmp
-	} else {
-		if err := a.fs.EnsureDir(outputDir); err != nil {
-			return err
-		}
-	}
-
-	if err := a.cloner.CloneRepositoryBranch(chosen.URL, br, workDir); err != nil {
-		return helpers.GitErr(err)
-	}
-	if dryRun {
-		helpers.Log.Info().Msgf("Cloned %s@%s into temporary directory for dry run", chosen.Name, br)
-	} else {
-		helpers.Log.Info().Msgf("Cloned %s@%s into %s", chosen.Name, br, outputDir)
-	}
-
-	// Get HEAD SHA before removing .git for cache
-	headSHA, _ := services.HeadSHA(workDir)
-
-	// Remove .git directory to make it a fresh repo
-	gitDir := filepath.Join(workDir, ".git")
-	if err := os.RemoveAll(gitDir); err != nil {
-		return fmt.Errorf("failed to remove %s: %w", gitDir, err)
-	}
-	helpers.Log.Info().Msg("Removed .git directory (new repo initialized)")
-
-	// Parse provided values if any
-	var provided domain.InputReplacement
-	if input != "" {
-		provided, err = a.parser.Parse(input)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Merge ignore patterns from flags and input file
-	ignorePatterns := append(ignoreFlags, provided.IgnorePath...)
-
-	// Analyze placeholders
-	counts, err := a.replacer.AnalyzeDir(workDir, fileSizeLimit, startDelim, endDelim, onlyTemplates, ignorePatterns)
-	if err != nil {
-		return err
-	}
-
-	// Update cache with discovered variables
-	if headSHA != "" && len(counts) > 0 {
-		services.UpdateVars(cache, chosen.URL, br, headSHA, counts)
-		cacheUpdated = true
-	}
-
-	if len(counts) == 0 {
-		helpers.Log.Info().Msg("No placeholders found.")
-		if cacheUpdated {
-			_ = services.SaveCache(cache)
-		}
-		return nil
-	}
-
-	// Build values map
-	values := map[string]string{}
-	for _, rpl := range provided.Variables {
-		values[rpl.Key] = rpl.Value
-	}
-
-	// Show summary
-	keys := make([]string, 0, len(counts))
-	for k := range counts {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	helpers.Log.Info().Msg("Discovered placeholders:")
-	for _, k := range keys {
-		v := values[k]
-		if v == "" {
-			v = "(unset)"
-		}
-		fmt.Printf("  %-24s  matches=%-6d  value=%s\n", k, counts[k], v)
-	}
-
-	// Prompt if requested
-	if interactivePrompt {
-		for _, k := range keys {
-			def := values[k]
-			fmt.Printf("Enter value for %s [%s]: ", k, def)
-			s, _ := r.ReadString('\n')
-			s = strings.TrimSpace(s)
-			if s != "" {
-				values[k] = s
-			}
-		}
-		fmt.Println()
-	}
-
-	// Build final replacements
-	final := domain.InputReplacement{}
-	for _, k := range keys {
-		if v, ok := values[k]; ok && v != "" {
-			final.Variables = append(final.Variables, domain.Replacement{Key: k, Value: v})
-		}
-	}
-
-	if len(final.Variables) == 0 {
-		helpers.Log.Info().Msg("No values provided; nothing to replace.")
-		if cacheUpdated {
-			_ = services.SaveCache(cache)
-		}
-		return nil
-	}
-
-	// Dry-run: show summary and exit without writing
-	if dryRun {
-		totalMatches := 0
-		for _, c := range counts {
-			totalMatches += c
-		}
-		helpers.Log.Info().Msgf("Dry run: %d replacements across %d placeholders would be applied. No files modified.", totalMatches, len(final.Variables))
-		if cacheUpdated {
-			_ = services.SaveCache(cache)
-		}
-		return nil
-	}
-
-	// Skip regular templating if onlyTemplates is set
-	if !onlyTemplates {
-		if err := a.replacer.ReplaceInDir(workDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
-			return err
-		}
-	}
-
-	// Process .tpl files if requested
-	if processTemplates {
-		if err := a.replacer.ProcessTemplateFiles(workDir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
-			return err
-		}
-		helpers.Log.Info().Msg("Template file processing complete.")
-	}
-
-	helpers.Log.Info().Msg("Templating complete.")
-	if cacheUpdated {
-		_ = services.SaveCache(cache)
-	}
-	return nil
+	return "main"
 }
 
-// promptString reads a line with a label and returns the trimmed value or default when empty
+// promptString reads a line with a label and returns the trimmed value or default when empty.
 func promptString(r *bufio.Reader, label string, def string) string {
 	if def == "" {
 		fmt.Printf("%s: ", label)

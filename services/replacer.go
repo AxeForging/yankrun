@@ -21,6 +21,7 @@ type Replacer interface {
 	AnalyzeDirDetails(dir string, fileSizeLimit string, startDelim string, endDelim string, onlyTemplates bool, ignorePatterns []string) ([]ReplacementFile, error)
 	EvaluatePlaceholder(expression string, values map[string]string) (string, bool, error)
 	ProcessTemplateFiles(dir string, replacements domain.InputReplacement, fileSizeLimit string, startDelim string, endDelim string, verbose bool, ignorePatterns []string) error
+	ReplaceContent(content string, replacements domain.InputReplacement, startDelim string, endDelim string) (string, int)
 }
 
 type ReplacementFile struct {
@@ -445,54 +446,7 @@ func (fr *FileReplacer) replacePatterns(dir string, basePath string, replacement
 			continue
 		}
 
-		newContent := string(content)
-		numReplacements := 0
-		// Create a map for quick lookup of replacement values by base key
-		replacementValues := make(map[string]string)
-		for _, r := range replacements.Variables {
-			replacementValues[r.Key] = r.Value
-		}
-
-		// Find all placeholders in the content
-		// This regex finds content between startDelim and endDelim
-		// It's a simple non-greedy match, adjust if delimiters can be nested or contain special regex chars
-		placeholderRegex := regexp.MustCompile(regexp.QuoteMeta(startDelim) + `(.*?)` + regexp.QuoteMeta(endDelim))
-
-		// Find all matches
-		matches := placeholderRegex.FindAllStringSubmatchIndex(newContent, -1)
-
-		// Process matches in reverse order to avoid issues with index changes
-		for i := len(matches) - 1; i >= 0; i-- {
-			match := matches[i]
-			fullMatchStart, fullMatchEnd := match[0], match[1]
-			placeholderContentStart, placeholderContentEnd := match[2], match[3]
-
-			placeholderWithTransforms := newContent[placeholderContentStart:placeholderContentEnd]
-
-			baseKey, transformations, err := fr.parsePlaceholder(placeholderWithTransforms)
-			if err != nil {
-				helpers.Log.Warn().Err(err).Msgf("Skipping invalid placeholder '%s'", placeholderWithTransforms)
-				continue
-			}
-
-			// Get the base value
-			baseValue, ok := replacementValues[baseKey]
-			if !ok {
-				// If no replacement value is found, skip this placeholder
-				continue
-			}
-
-			// Apply transformations
-			finalValue, err := fr.applyTransformations(baseValue, transformations)
-			if err != nil {
-				helpers.Log.Warn().Err(err).Msgf("Skipping transformation for '%s'", placeholderWithTransforms)
-				continue
-			}
-
-			// Replace the full placeholder (including delimiters) with the final value
-			newContent = newContent[:fullMatchStart] + finalValue + newContent[fullMatchEnd:]
-			numReplacements++
-		}
+		newContent, numReplacements := fr.ReplaceContent(string(content), replacements, startDelim, endDelim)
 
 		err = fr.FileSystem.WriteFile(path, []byte(newContent), info.Mode().Perm())
 		if err != nil {
@@ -505,6 +459,49 @@ func (fr *FileReplacer) replacePatterns(dir string, basePath string, replacement
 	}
 
 	return nil
+}
+
+// ReplaceContent applies replacements to an in-memory string and returns the
+// new content plus the number of substitutions made. It shares the exact
+// delimiter/transform semantics of ReplaceInDir, so it is used both to write
+// files and to compute dry-run diffs without touching disk.
+func (fr *FileReplacer) ReplaceContent(content string, replacements domain.InputReplacement, startDelim, endDelim string) (string, int) {
+	replacementValues := make(map[string]string, len(replacements.Variables))
+	for _, r := range replacements.Variables {
+		replacementValues[r.Key] = r.Value
+	}
+
+	// Non-greedy match of everything between the delimiters. Delimiters are
+	// quoted so custom pairs with regex-special characters are safe.
+	placeholderRegex := regexp.MustCompile(regexp.QuoteMeta(startDelim) + `(.*?)` + regexp.QuoteMeta(endDelim))
+	matches := placeholderRegex.FindAllStringSubmatchIndex(content, -1)
+
+	newContent := content
+	numReplacements := 0
+	// Process matches in reverse so earlier indices stay valid as we splice.
+	for i := len(matches) - 1; i >= 0; i-- {
+		match := matches[i]
+		fullMatchStart, fullMatchEnd := match[0], match[1]
+		placeholderWithTransforms := newContent[match[2]:match[3]]
+
+		baseKey, transformations, err := fr.parsePlaceholder(placeholderWithTransforms)
+		if err != nil {
+			helpers.Log.Warn().Err(err).Msgf("Skipping invalid placeholder '%s'", placeholderWithTransforms)
+			continue
+		}
+		baseValue, ok := replacementValues[baseKey]
+		if !ok {
+			continue
+		}
+		finalValue, err := fr.applyTransformations(baseValue, transformations)
+		if err != nil {
+			helpers.Log.Warn().Err(err).Msgf("Skipping transformation for '%s'", placeholderWithTransforms)
+			continue
+		}
+		newContent = newContent[:fullMatchStart] + finalValue + newContent[fullMatchEnd:]
+		numReplacements++
+	}
+	return newContent, numReplacements
 }
 
 // applyTransformations applies a series of transformation functions to a given value.
