@@ -1,10 +1,8 @@
 package actions
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/AxeForging/yankrun/domain"
 	"github.com/AxeForging/yankrun/helpers"
@@ -41,7 +39,11 @@ func runApply(engine workflow.Engine, opts applyOptions) (workflow.ApplyResult, 
 	answers := map[string]string{}
 	if opts.interactive && helpers.IsInteractive() {
 		base := workflow.ResolveValues(summary.Manifest, fileValues, envValues, nil)
-		answers = promptForValues(summary.Keys, base)
+		ans, err := ui.PromptValues(summary.Manifest, summary.Keys, base)
+		if err != nil {
+			return workflow.ApplyResult{}, summary.Manifest, err
+		}
+		answers = ans
 	}
 	resolved := workflow.ResolveValues(summary.Manifest, fileValues, envValues, answers)
 
@@ -94,24 +96,6 @@ func valuesFromInput(in domain.InputReplacement) map[string]string {
 		values[r.Key] = r.Value
 	}
 	return values
-}
-
-// promptForValues asks for each key with the resolved value as the default.
-// This bufio flow is the interim; the huh-based form replaces it in a later
-// milestone. It only runs on a real terminal.
-func promptForValues(keys []string, base map[string]string) map[string]string {
-	answers := map[string]string{}
-	r := bufio.NewReader(os.Stdin)
-	for _, k := range keys {
-		def := base[k]
-		fmt.Printf("Enter value for %s [%s]: ", k, def)
-		s, _ := r.ReadString('\n')
-		if s = strings.TrimSpace(s); s != "" {
-			answers[k] = s
-		}
-	}
-	fmt.Println()
-	return answers
 }
 
 // printDiffs renders any per-file dry-run diffs attached to the result.

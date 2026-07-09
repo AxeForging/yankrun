@@ -1,16 +1,17 @@
 package actions
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/AxeForging/yankrun/domain"
 	"github.com/AxeForging/yankrun/helpers"
 	"github.com/AxeForging/yankrun/internal/schema"
+	"github.com/AxeForging/yankrun/internal/ui"
 	"github.com/AxeForging/yankrun/internal/workflow"
 	"github.com/AxeForging/yankrun/services"
 	"github.com/urfave/cli/v3"
@@ -74,17 +75,22 @@ func (a *GenerateAction) run(cmd *cli.Command) (workflow.ApplyResult, *domain.Ma
 	}
 	if len(cfg.Templates) == 0 && cfg.GitHub.User == "" && len(cfg.GitHub.Orgs) == 0 && templateFilter == "" && interactiveAllowed {
 		// Minimal discovery setup, only when we can actually prompt.
-		r := bufio.NewReader(os.Stdin)
 		fmt.Println("No templates configured. Let's set where to search:")
-		u := strings.TrimSpace(promptString(r, "GitHub user (optional, Enter to skip)", ""))
-		orgsCSV := strings.TrimSpace(promptString(r, "GitHub orgs (comma-separated, optional)", ""))
+		u, err := ui.Input("GitHub user", "optional — Enter to skip", "")
+		if err != nil {
+			return workflow.ApplyResult{}, nil, dryRun, err
+		}
+		orgsCSV, err := ui.Input("GitHub orgs", "comma-separated, optional", "")
+		if err != nil {
+			return workflow.ApplyResult{}, nil, dryRun, err
+		}
 		var orgs []string
 		for _, p := range strings.Split(orgsCSV, ",") {
 			if s := strings.TrimSpace(p); s != "" {
 				orgs = append(orgs, s)
 			}
 		}
-		cfg.GitHub.User = u
+		cfg.GitHub.User = strings.TrimSpace(u)
 		cfg.GitHub.Orgs = orgs
 		_ = services.Save(cfg)
 	}
@@ -129,15 +135,16 @@ func (a *GenerateAction) run(cmd *cli.Command) (workflow.ApplyResult, *domain.Ma
 		return workflow.ApplyResult{}, nil, dryRun, err
 	}
 
-	br := a.selectBranch(chosen, branchFlag, interactivePrompt, interactiveAllowed)
+	br, err := a.selectBranch(chosen, branchFlag, interactivePrompt, interactiveAllowed)
+	if err != nil {
+		return workflow.ApplyResult{}, nil, dryRun, err
+	}
 
 	if outputDir == "" && !dryRun {
 		if interactiveAllowed {
-			r := bufio.NewReader(os.Stdin)
-			fmt.Printf("Output directory [./new-project]: ")
-			out, _ := r.ReadString('\n')
-			if out = strings.TrimSpace(out); out == "" {
-				out = "./new-project"
+			out, err := ui.Input("Output directory", "where the new project is created", "./new-project")
+			if err != nil {
+				return workflow.ApplyResult{}, nil, dryRun, err
 			}
 			outputDir = out
 		} else {
@@ -228,7 +235,7 @@ func (a *GenerateAction) selectTemplate(repos []domain.TemplateRepo, filter stri
 	case filter != "" && !interactivePrompt:
 		return filtered[0], nil
 	case interactiveAllowed:
-		return a.promptTemplate(repos), nil
+		return a.promptTemplate(repos)
 	case len(filtered) == 1:
 		return filtered[0], nil
 	default:
@@ -236,54 +243,37 @@ func (a *GenerateAction) selectTemplate(repos []domain.TemplateRepo, filter stri
 	}
 }
 
-// promptTemplate runs the interactive template picker.
-func (a *GenerateAction) promptTemplate(repos []domain.TemplateRepo) domain.TemplateRepo {
-	r := bufio.NewReader(os.Stdin)
-	helpers.Log.Info().Msg("Available templates:")
+// promptTemplate runs the interactive template picker (a filterable select).
+func (a *GenerateAction) promptTemplate(repos []domain.TemplateRepo) (domain.TemplateRepo, error) {
+	opts := make([]ui.SelectOption, len(repos))
 	for i, t := range repos {
-		fmt.Printf("  [%d] %s  (%s)\n", i+1, t.Name, t.URL)
-	}
-	fmt.Printf("Filter templates by substring (press Enter to skip): ")
-	filter, _ := r.ReadString('\n')
-	filter = strings.TrimSpace(filter)
-	filtered := repos
-	if filter != "" {
-		var match []domain.TemplateRepo
-		for _, t := range repos {
-			if strings.Contains(strings.ToLower(t.Name), strings.ToLower(filter)) || strings.Contains(strings.ToLower(t.URL), strings.ToLower(filter)) {
-				match = append(match, t)
-			}
+		label := t.Name
+		if t.URL != "" {
+			label += "  (" + t.URL + ")"
 		}
-		if len(match) > 0 {
-			filtered = match
-		}
+		opts[i] = ui.SelectOption{Label: label, Value: strconv.Itoa(i)}
 	}
-	for i, t := range filtered {
-		fmt.Printf("  [%d] %s  (%s)\n", i+1, t.Name, t.URL)
+	sel, err := ui.Select("Select a template", opts)
+	if err != nil {
+		return domain.TemplateRepo{}, err
 	}
-	fmt.Printf("Select template [1-%d]: ", len(filtered))
-	selStr, _ := r.ReadString('\n')
-	idx := 0
-	if selStr = strings.TrimSpace(selStr); selStr != "" {
-		fmt.Sscanf(selStr, "%d", &idx)
-		idx--
-	}
-	if idx < 0 || idx >= len(filtered) {
+	idx, _ := strconv.Atoi(sel)
+	if idx < 0 || idx >= len(repos) {
 		idx = 0
 	}
-	return filtered[idx]
+	return repos[idx], nil
 }
 
 // selectBranch resolves the branch, prompting only when allowed.
-func (a *GenerateAction) selectBranch(chosen domain.TemplateRepo, branchFlag string, interactivePrompt, interactiveAllowed bool) string {
+func (a *GenerateAction) selectBranch(chosen domain.TemplateRepo, branchFlag string, interactivePrompt, interactiveAllowed bool) (string, error) {
 	if !interactivePrompt || !interactiveAllowed {
 		switch {
 		case branchFlag != "":
-			return branchFlag
+			return branchFlag, nil
 		case chosen.DefaultBranch != "":
-			return chosen.DefaultBranch
+			return chosen.DefaultBranch, nil
 		default:
-			return "main"
+			return "main", nil
 		}
 	}
 
@@ -291,51 +281,12 @@ func (a *GenerateAction) selectBranch(chosen domain.TemplateRepo, branchFlag str
 	if len(branches) == 0 && chosen.DefaultBranch != "" {
 		branches = []string{chosen.DefaultBranch}
 	}
-	r := bufio.NewReader(os.Stdin)
-	fmt.Printf("Type to filter branches (Enter to accept default [%s]): ", chosen.DefaultBranch)
-	branchFilter, _ := r.ReadString('\n')
-	branchFilter = strings.TrimSpace(branchFilter)
-	candidates := branches
-	if branchFilter != "" {
-		var match []string
-		for _, b := range branches {
-			if strings.Contains(strings.ToLower(b), strings.ToLower(branchFilter)) {
-				match = append(match, b)
-			}
-		}
-		if len(match) > 0 {
-			candidates = match
-		}
+	if len(branches) == 0 {
+		branches = []string{"main"}
 	}
-	fmt.Println("Available branches:")
-	for i, b := range candidates {
-		fmt.Printf("  [%d] %s\n", i+1, b)
+	opts := make([]ui.SelectOption, len(branches))
+	for i, b := range branches {
+		opts[i] = ui.SelectOption{Label: b, Value: b}
 	}
-	fmt.Printf("Select branch [1-%d] (Enter for default): ", len(candidates))
-	pick, _ := r.ReadString('\n')
-	if pick = strings.TrimSpace(pick); pick != "" {
-		var idx int
-		if _, err := fmt.Sscanf(pick, "%d", &idx); err == nil && idx >= 1 && idx <= len(candidates) {
-			return candidates[idx-1]
-		}
-	}
-	if chosen.DefaultBranch != "" {
-		return chosen.DefaultBranch
-	}
-	return "main"
-}
-
-// promptString reads a line with a label and returns the trimmed value or default when empty.
-func promptString(r *bufio.Reader, label string, def string) string {
-	if def == "" {
-		fmt.Printf("%s: ", label)
-	} else {
-		fmt.Printf("%s [%s]: ", label, def)
-	}
-	if v, err := r.ReadString('\n'); err == nil {
-		if s := strings.TrimSpace(v); s != "" {
-			return s
-		}
-	}
-	return def
+	return ui.Select("Select a branch", opts)
 }

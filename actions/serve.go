@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 
 	"github.com/AxeForging/yankrun/domain"
 	"github.com/AxeForging/yankrun/helpers"
+	"github.com/AxeForging/yankrun/internal/ui"
 	"github.com/AxeForging/yankrun/internal/web"
 	"github.com/AxeForging/yankrun/services"
 	"github.com/urfave/cli/v3"
@@ -73,7 +75,8 @@ func (a *ServeAction) Execute(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("init web server: %w", err)
 	}
 
-	helpers.Log.Info().Msgf("YankRun web UI listening on http://%s", server.Addr())
-	fmt.Printf("\n  Open http://%s in your browser.\n\n", server.Addr())
+	url := "http://" + server.Addr()
+	helpers.Log.Info().Msgf("YankRun web UI listening on %s", url)
+	ui.PrintServeBanner(os.Stdout, url)
 	return server.ListenAndServe()
 }
