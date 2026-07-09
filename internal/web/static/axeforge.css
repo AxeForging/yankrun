@@ -1,0 +1,171 @@
+/* ============================================================
+   AxeForge Brand Kit v1 — https://tools.axeforge.io
+   Vendored for yankrun serve. Only change vs. the canonical kit:
+   the Google-Fonts @import is replaced by self-hosted @font-face
+   blocks (fonts embedded in the binary) so the workbench works
+   fully offline. See ../../../branding/ for the source.
+
+   Flavor: forge (default) — templating.
+   ============================================================ */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/fonts/inter-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/static/fonts/inter-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/static/fonts/inter-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/fonts/inter-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/fonts/jetbrains-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/static/fonts/jetbrains-mono-500.woff2") format("woff2");
+}
+
+/* ---- Shell tokens: identical in every flavor. Never override. ---- */
+:root {
+  color-scheme: dark;
+
+  --af-bg: #05070a;
+  --af-surface: #0a0f1a;
+  --af-surface-2: #0d1117; /* terminal body */
+  --af-surface-3: #161b22; /* terminal header */
+  --af-line: #1a2233;
+  --af-text: #ffffff;
+  --af-text-muted: #94a3b8;
+
+  --af-font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --af-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --af-radius: 0.5rem;
+  --af-radius-lg: 1rem;
+
+  /* ---- Flavor tokens. Default = forge. ---- */
+  --af-accent: #ff4e00;
+  --af-accent-hover: #e64600;
+  --af-accent-contrast: #ffffff;
+}
+
+[data-flavor="circuit"] {
+  --af-accent: #22d3ee;
+  --af-accent-hover: #06b6d4;
+  --af-accent-contrast: #05070a;
+}
+[data-flavor="flux"] {
+  --af-accent: #a78bfa;
+  --af-accent-hover: #8b5cf6;
+  --af-accent-contrast: #05070a;
+}
+[data-flavor="signal"] {
+  --af-accent: #ffb000;
+  --af-accent-hover: #e69e00;
+  --af-accent-contrast: #05070a;
+}
+
+/* ---- Base ---- */
+body {
+  background: var(--af-bg);
+  color: var(--af-text);
+  font-family: var(--af-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--af-accent);
+  outline-offset: 2px;
+}
+
+/* ---- Components ---- */
+.technical-grid {
+  background-size: 80px 80px;
+  background-image: radial-gradient(circle, var(--af-line) 1px, transparent 1px);
+}
+
+.glass-card {
+  background: color-mix(in srgb, var(--af-surface) 60%, transparent);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius-lg);
+  transition: border-color 0.5s ease, box-shadow 0.5s ease;
+}
+.glass-card:hover {
+  border-color: color-mix(in srgb, var(--af-accent) 50%, transparent);
+}
+
+.terminal-window {
+  background: var(--af-surface-2);
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
+  overflow: hidden;
+  font-family: var(--af-font-mono);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+}
+.terminal-header {
+  background: var(--af-surface-3);
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--af-line);
+}
+
+/* macOS traffic lights — semantic, not brand; fixed hexes on purpose */
+.dot { width: 10px; height: 10px; border-radius: 9999px; }
+.dot-red { background: #ff5f56; }
+.dot-yellow { background: #ffbd2e; }
+.dot-green { background: #27c93f; }
+
+.glow-accent {
+  box-shadow: 0 0 20px color-mix(in srgb, var(--af-accent) 15%, transparent);
+}
+
+.axe-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--af-accent);
+  color: var(--af-accent-contrast);
+  padding: 0.75rem 1.5rem;
+  border: 0;
+  border-radius: var(--af-radius);
+  font-family: var(--af-font-sans);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.axe-button:hover { background: var(--af-accent-hover); }
+.axe-button:active { transform: scale(0.95); }

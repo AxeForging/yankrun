@@ -177,12 +177,64 @@ function render() {
   }
   rows.innerHTML = summary.keys.map((k, i) =>
     '<div class="row" style="--i:' + i + '">' +
-    '<div class="value-cell"><label>' + esc(k) + '</label>' +
-    '<input data-key="' + esc(k) + '" value="' + esc(summary.values[k] || "") + '" autocomplete="off">' +
+    '<div class="value-cell">' + renderField(k) +
     renderTree(k) + '</div>' +
     '<div class="count">' + (summary.counts[k] || 0) + ' hits</div></div>'
   ).join("");
-  document.querySelectorAll("[data-key]").forEach(i => i.addEventListener("input", scheduleEvaluate));
+  document.querySelectorAll("[data-key]").forEach(i => {
+    i.addEventListener("input", scheduleEvaluate);
+    if (i.dataset.pattern) {
+      i.addEventListener("input", () => validatePattern(i));
+      validatePattern(i);
+    }
+  });
+}
+
+// manifestVar returns the yankrun.yaml declaration for a key, if any.
+function manifestVar(key) {
+  const m = summary.manifest;
+  if (!m || !Array.isArray(m.variables)) return null;
+  return m.variables.find(v => v.key === key) || null;
+}
+
+// renderField draws the label (with a required badge and description from the
+// manifest) plus the control — a select for enums, an input otherwise.
+function renderField(k) {
+  const mv = manifestVar(k);
+  const val = summary.values[k] || "";
+  const req = mv && mv.required ? '<span class="req-badge">REQUIRED</span>' : "";
+  const desc = mv && mv.description ? '<p class="field-desc">' + esc(mv.description) + '</p>' : "";
+  let control;
+  if (mv && Array.isArray(mv.enum) && mv.enum.length) {
+    control = '<select data-key="' + esc(k) + '" aria-label="' + esc(k) + '">' +
+      mv.enum.map(o => '<option value="' + esc(o) + '"' + (o === val ? ' selected' : '') + '>' + esc(o) + '</option>').join("") +
+      '</select>';
+  } else {
+    const pat = mv && mv.pattern ? ' data-pattern="' + esc(mv.pattern) + '"' : "";
+    control = '<input data-key="' + esc(k) + '" value="' + esc(val) + '" autocomplete="off" aria-label="' + esc(k) + '"' + pat + '>';
+  }
+  return '<label>' + esc(k) + req + '</label>' + desc + control;
+}
+
+// validatePattern flags an input whose value violates its manifest pattern.
+function validatePattern(input) {
+  try {
+    const re = new RegExp(input.dataset.pattern);
+    const ok = input.value === "" || re.test(input.value);
+    input.setAttribute("aria-invalid", ok ? "false" : "true");
+  } catch (_) {
+    /* an invalid pattern is the template author's problem, not the user's */
+  }
+}
+
+// renderDiff shows a file's dry-run unified diff in a terminal-styled block.
+function renderDiff(file) {
+  if (!file.diff) return "";
+  const body = file.diff.split("\n").map(line => {
+    const cls = line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : "ctx";
+    return '<span class="' + cls + '">' + esc(line) + '</span>';
+  }).join("\n");
+  return '<div class="diff"><div class="diff-head">' + esc(file.path) + '</div><pre>' + body + '</pre></div>';
 }
 
 function renderTree(key) {
@@ -192,8 +244,11 @@ function renderTree(key) {
     '<div class="tree-root">./</div>' +
     files.map((f, i) => {
       const branch = i === files.length - 1 ? "`--" : "+--";
+      // Render the diff once per file, under the first key it contains.
+      const fileKeys = Object.keys(f.counts || {}).sort();
+      const showDiff = fileKeys.length && fileKeys[0] === key;
       return '<div class="tree-file"><span class="branch">' + branch + '</span><span class="path">' + esc(f.path) + '</span><span class="hit-pill">' + f.counts[key] + '</span></div>' +
-        renderPreviews(f, key);
+        renderPreviews(f, key) + (showDiff ? renderDiff(f) : "");
     }).join("") +
   '</div>';
 }

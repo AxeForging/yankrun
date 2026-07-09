@@ -1,12 +1,34 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-flavor="forge">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>YankRun Workbench</title>
+<meta name="theme-color" content="#05070a">
+<title>yankrun workbench</title>
+<link rel="icon" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/axeforge.css">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<header class="topbar">
+  <div class="brand">
+    <svg class="mark" width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="7" fill="var(--af-accent)"></rect>
+      <text x="16" y="22" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="18" font-weight="700" fill="var(--af-accent-contrast)">y</text>
+    </svg>
+    <span class="wordmark">yankrun</span>
+    <span class="tagline">workbench</span>
+  </div>
+  <div class="topbar-actions">
+    <div class="dir-pill" title="{{.Dir}}">{{.Dir}}</div>
+    <form class="delim-form" id="delimForm" aria-label="Placeholder delimiters">
+      <input class="delim-input" id="delimStart" value="{{.StartDelim}}" size="3" aria-label="Start delimiter" autocomplete="off" spellcheck="false">
+      <span class="delim-key">KEY</span>
+      <input class="delim-input" id="delimEnd" value="{{.EndDelim}}" size="3" aria-label="End delimiter" autocomplete="off" spellcheck="false">
+      <button class="delim-set" id="delimSet" type="submit" title="Apply custom delimiters and rescan">Set</button>
+    </form>
+  </div>
+</header>
 <div class="app-frame">
   <aside class="preset-rail" aria-label="Saved presets">
     <div class="panel card">
@@ -17,8 +39,8 @@
           <button class="quiet icon-btn" id="importRuns" type="button" title="Import presets">Import</button>
         </div>
       </div>
-      <input class="preset-search" id="presetSearch" placeholder="Search repos, templates, branches">
-      <div class="preset-filters" aria-label="Preset filters">
+      <input class="preset-search" id="presetSearch" placeholder="Search repos, templates, branches" aria-label="Search saved presets">
+      <div class="preset-filters" role="group" aria-label="Preset filters">
         <button class="quiet active" type="button" data-preset-filter="all">All</button>
         <button class="quiet" type="button" data-preset-filter="clone">Clone</button>
         <button class="quiet" type="button" data-preset-filter="generate">Generate</button>
@@ -29,32 +51,20 @@
     </div>
   </aside>
   <main class="shell">
-    <section class="top">
-      <div class="brand"><div class="mark">Y</div><div>YankRun Workbench</div></div>
-      <div class="top-meta">
-        <div class="pill dir-pill">{{.Dir}}</div>
-        <form class="pill delim-form" id="delimForm" aria-label="Placeholder delimiters">
-          <input class="delim-input" id="delimStart" value="{{.StartDelim}}" size="3" aria-label="Start delimiter" autocomplete="off" spellcheck="false">
-          <span class="delim-key">KEY</span>
-          <input class="delim-input" id="delimEnd" value="{{.EndDelim}}" size="3" aria-label="End delimiter" autocomplete="off" spellcheck="false">
-          <button class="delim-set" id="delimSet" type="submit" title="Apply custom delimiters and rescan">Set</button>
-        </form>
-      </div>
-    </section>
     <section class="grid">
       <div class="hero">
         <div class="eyebrow"><span class="dot"></span>Scan · Preview · Apply</div>
         <h1>Template repos without guessing.</h1>
-        <p>Edit discovered values, preview the replacement count, and apply only when the result is clear. The server is local by default and dry-run mode blocks writes.</p>
-        <div id="notice" class="banner"></div>
+        <p>Edit discovered values, preview the exact diff, and apply only when the result is clear. The server is local by default and dry-run mode blocks writes.</p>
+        <div id="notice" class="banner" role="status" aria-live="polite"></div>
         <div class="panel placeholder-panel">
           <div class="toolbar"><strong>Discovered placeholders</strong><span class="status" id="status">loading</span></div>
-          <div class="rows" id="rows"><div class="empty">Scanning directory...</div></div>
+          <div class="rows" id="rows"><div class="empty">Scanning directory…</div></div>
         </div>
       </div>
-      <aside class="side">
+      <aside class="side" aria-label="Actions">
         <div class="panel card">
-          <div class="mode-tabs">
+          <div class="mode-tabs" role="group" aria-label="Source mode">
             <button class="quiet active" data-mode="local">Local</button>
             <button class="quiet" data-mode="clone">Clone</button>
             <button class="quiet" data-mode="generate">Generate</button>
@@ -63,26 +73,26 @@
             <p class="helper">Use the directory passed with <code>--dir</code>.</p>
           </div>
           <div class="mode" id="mode-clone">
-            <label>Repository access</label>
+            <label for="cloneRepo">Repository access</label>
             <div class="choice-row" role="group" aria-label="Repository access">
               <button class="quiet active" type="button" data-repo-type="ssh">SSH</button>
               <button class="quiet" type="button" data-repo-type="https">HTTPS</button>
             </div>
-            <label>Repository URL</label>
+            <label for="cloneRepo">Repository URL</label>
             <input id="cloneRepo" placeholder="git@github.com:org/repo.git">
-            <label>Branch</label>
+            <label for="cloneBranch">Branch</label>
             <input id="cloneBranch" placeholder="main">
-            <label>Output directory</label>
+            <label for="cloneOutput">Output directory</label>
             <input id="cloneOutput" placeholder="./new-project">
             <p class="helper compact">SSH uses your local git/agent auth. HTTPS works for public repos and credential-managed private repos.</p>
             <div class="actions"><button class="ghost" id="clonePreview" type="button">Preview clone</button><button class="primary" id="cloneApply" type="button">Clone and apply</button></div>
           </div>
           <div class="mode" id="mode-generate">
-            <label>Template</label>
+            <label for="templateSelect">Template</label>
             <select id="templateSelect"></select>
-            <label>Branch</label>
+            <label for="generateBranch">Branch</label>
             <input id="generateBranch" placeholder="template default">
-            <label>Output directory</label>
+            <label for="generateOutput">Output directory</label>
             <input id="generateOutput" placeholder="./new-project">
             <p class="helper compact">Templates come from <code>~/.yankrun/config.yaml</code> and configured GitHub template discovery.</p>
             <div class="actions"><button class="ghost" id="generatePreview" type="button">Preview generate</button><button class="primary" id="generateApply" type="button">Generate and apply</button></div>
