@@ -36,13 +36,13 @@ func main() {
 	tplFile2 := filepath.Join(workDir, "main.tpl")
 	regularFile := filepath.Join(workDir, "config.txt")
 
-	if err := os.WriteFile(tplFile1, []byte(tplContent1), 0644); err != nil {
+	if err := os.WriteFile(tplFile1, []byte(tplContent1), 0o644); err != nil {
 		t.Fatalf("Failed to create README.md.tpl: %v", err)
 	}
-	if err := os.WriteFile(tplFile2, []byte(tplContent2), 0644); err != nil {
+	if err := os.WriteFile(tplFile2, []byte(tplContent2), 0o644); err != nil {
 		t.Fatalf("Failed to create main.tpl: %v", err)
 	}
-	if err := os.WriteFile(regularFile, []byte("This is a regular file with [[PLACEHOLDER]]"), 0644); err != nil {
+	if err := os.WriteFile(regularFile, []byte("This is a regular file with [[PLACEHOLDER]]"), 0o644); err != nil {
 		t.Fatalf("Failed to create config.txt: %v", err)
 	}
 
@@ -154,7 +154,7 @@ func TestTemplateProcessingWithoutFlag(t *testing.T) {
 	// Create test .tpl file
 	tplContent := `Hello [[NAME]]!`
 	tplFile := filepath.Join(workDir, "test.tpl")
-	if err := os.WriteFile(tplFile, []byte(tplContent), 0644); err != nil {
+	if err := os.WriteFile(tplFile, []byte(tplContent), 0o644); err != nil {
 		t.Fatalf("Failed to create test.tpl: %v", err)
 	}
 
@@ -221,10 +221,10 @@ func main() {
 	tplFile1 := filepath.Join(testRepoDir, "README.md.tpl")
 	tplFile2 := filepath.Join(testRepoDir, "main.tpl")
 
-	if err := os.WriteFile(tplFile1, []byte(tplContent1), 0644); err != nil {
+	if err := os.WriteFile(tplFile1, []byte(tplContent1), 0o644); err != nil {
 		t.Fatalf("Failed to create README.md.tpl: %v", err)
 	}
-	if err := os.WriteFile(tplFile2, []byte(tplContent2), 0644); err != nil {
+	if err := os.WriteFile(tplFile2, []byte(tplContent2), 0o644); err != nil {
 		t.Fatalf("Failed to create main.tpl: %v", err)
 	}
 

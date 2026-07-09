@@ -10,7 +10,7 @@ func TestGetSSHKeyPath_AutoDetect(t *testing.T) {
 	// Create a temp dir to simulate ~/.ssh
 	tmpHome := t.TempDir()
 	sshDir := filepath.Join(tmpHome, ".ssh")
-	if err := os.MkdirAll(sshDir, 0700); err != nil {
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -22,7 +22,7 @@ func TestGetSSHKeyPath_AutoDetect(t *testing.T) {
 
 	t.Run("explicit path exists", func(t *testing.T) {
 		keyFile := filepath.Join(sshDir, "my_custom_key")
-		if err := os.WriteFile(keyFile, []byte("fake-key"), 0600); err != nil {
+		if err := os.WriteFile(keyFile, []byte("fake-key"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		gc.SSHKeyPath = keyFile
@@ -49,8 +49,8 @@ func TestGetSSHKeyPath_AutoDetect(t *testing.T) {
 		// Create both id_rsa and id_ed25519
 		rsaFile := filepath.Join(sshDir, "id_rsa")
 		ed25519File := filepath.Join(sshDir, "id_ed25519")
-		os.WriteFile(rsaFile, []byte("fake-rsa"), 0600)
-		os.WriteFile(ed25519File, []byte("fake-ed25519"), 0600)
+		os.WriteFile(rsaFile, []byte("fake-rsa"), 0o600)
+		os.WriteFile(ed25519File, []byte("fake-ed25519"), 0o600)
 
 		// Call the auto-detect logic directly (can't override user.Current in unit test,
 		// so we test the candidate ordering via a helper)
@@ -73,7 +73,7 @@ func TestGetSSHKeyPath_AutoDetect(t *testing.T) {
 
 	t.Run("auto-detect falls back to rsa", func(t *testing.T) {
 		rsaFile := filepath.Join(sshDir, "id_rsa")
-		os.WriteFile(rsaFile, []byte("fake-rsa"), 0600)
+		os.WriteFile(rsaFile, []byte("fake-rsa"), 0o600)
 
 		candidates := []string{"id_ed25519", "id_ecdsa", "id_rsa"}
 		var found string
@@ -94,7 +94,7 @@ func TestGetSSHKeyPath_AutoDetect(t *testing.T) {
 	t.Run("auto-detect no keys returns error", func(t *testing.T) {
 		// Empty ssh dir — no keys
 		emptySshDir := filepath.Join(t.TempDir(), ".ssh")
-		os.MkdirAll(emptySshDir, 0700)
+		os.MkdirAll(emptySshDir, 0o700)
 
 		candidates := []string{"id_ed25519", "id_ecdsa", "id_rsa"}
 		found := false

@@ -39,7 +39,7 @@ func LoadCacheFrom(path string) (*domain.Cache, error) {
 
 // SaveCacheTo saves cache to a specific path
 func SaveCacheTo(path string, cache *domain.Cache) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	f, err := os.Create(path)

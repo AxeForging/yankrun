@@ -1,17 +1,16 @@
+// Package tui implements yankrun's full-screen interactive templating
+// workbench: the terminal twin of `yankrun serve`. It scans a directory, lets
+// the user fill placeholder values (manifest-aware), previews the exact diffs,
+// and applies on confirmation. All data operations go through workflow.Engine.
 package tui
 
 import (
-	"bufio"
-	"fmt"
 	"io"
-	"os"
-	"strings"
-	"time"
 
 	"github.com/AxeForging/yankrun/domain"
-	"github.com/AxeForging/yankrun/helpers"
 	"github.com/AxeForging/yankrun/internal/workflow"
 	"github.com/AxeForging/yankrun/services"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type Options struct {
@@ -26,17 +25,14 @@ type Options struct {
 	Verbose          bool
 	Provided         domain.InputReplacement
 	Replacer         services.Replacer
-	In               io.Reader
-	Out              io.Writer
+	// In/Out override the program's I/O; used by tests. Production leaves them
+	// nil so bubbletea uses the real terminal.
+	In  io.Reader
+	Out io.Writer
 }
 
+// Run starts the interactive workbench and blocks until the user exits.
 func Run(opts Options) error {
-	if opts.In == nil {
-		opts.In = os.Stdin
-	}
-	if opts.Out == nil {
-		opts.Out = os.Stdout
-	}
 	if opts.StartDelim == "" {
 		opts.StartDelim = "[["
 	}
@@ -46,15 +42,6 @@ func Run(opts Options) error {
 	if opts.FileSizeLimit == "" {
 		opts.FileSizeLimit = "3 mb"
 	}
-
-	fmt.Fprint(opts.Out, "\033[2J\033[H")
-	fmt.Fprintln(opts.Out, "YankRun TUI")
-	fmt.Fprintln(opts.Out, "Scanning template surface")
-	for i := 0; i < 3; i++ {
-		fmt.Fprint(opts.Out, ".")
-		time.Sleep(80 * time.Millisecond)
-	}
-	fmt.Fprintln(opts.Out)
 
 	engine := workflow.Engine{Replacer: opts.Replacer}
 	settings := workflow.TemplateSettings{
@@ -66,64 +53,16 @@ func Run(opts Options) error {
 		Verbose:          opts.Verbose,
 		IgnorePatterns:   opts.IgnorePatterns,
 	}
-	summary, err := engine.ScanDir(opts.Dir, settings, opts.Provided)
-	if err != nil {
-		return err
-	}
-	if len(summary.Counts) == 0 {
-		helpers.Log.Info().Msg("No placeholders found.")
-		return nil
-	}
 
-	keys := summary.Keys
-	values := summary.Values
-	reader := bufio.NewReader(opts.In)
+	m := newModel(engine, opts.Dir, settings, opts.Provided, opts.DryRun)
 
-	fmt.Fprintln(opts.Out)
-	fmt.Fprintln(opts.Out, "Discovered placeholders")
-	for _, k := range keys {
-		def := values[k]
-		if def == "" {
-			def = "(unset)"
-		}
-		fmt.Fprintf(opts.Out, "  %-24s matches=%-6d value=%s\n", k, summary.Counts[k], def)
+	var progOpts []tea.ProgramOption
+	if opts.In != nil {
+		progOpts = append(progOpts, tea.WithInput(opts.In))
 	}
-	fmt.Fprintln(opts.Out)
-
-	for _, k := range keys {
-		fmt.Fprintf(opts.Out, "Value for %s [%s]: ", k, values[k])
-		answer, _ := reader.ReadString('\n')
-		answer = strings.TrimSpace(answer)
-		if answer != "" {
-			values[k] = answer
-		}
+	if opts.Out != nil {
+		progOpts = append(progOpts, tea.WithOutput(opts.Out))
 	}
-
-	final := workflow.BuildFinal(keys, values)
-	if len(final.Variables) == 0 {
-		helpers.Log.Info().Msg("No values provided; nothing to replace.")
-		return nil
-	}
-
-	total := workflow.ReplacementMatchCount(keys, summary.Counts, values)
-	fmt.Fprintln(opts.Out)
-	fmt.Fprintf(opts.Out, "Preview: %d replacements across %d placeholders.\n", total, len(final.Variables))
-	if opts.DryRun {
-		helpers.Log.Info().Msg("Dry run enabled; no files modified.")
-		return nil
-	}
-
-	fmt.Fprint(opts.Out, "Apply these changes? Type yes to continue: ")
-	answer, _ := reader.ReadString('\n')
-	if strings.ToLower(strings.TrimSpace(answer)) != "yes" {
-		helpers.Log.Info().Msg("Cancelled; no files modified.")
-		return nil
-	}
-
-	if err := engine.ApplyFinal(opts.Dir, settings, final); err != nil {
-		return err
-	}
-
-	helpers.Log.Info().Msg("Templating complete.")
-	return nil
+	_, err := tea.NewProgram(m, progOpts...).Run()
+	return err
 }

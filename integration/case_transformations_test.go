@@ -23,7 +23,7 @@ Greeting: <!GREETING:gsub(WORLD,HELM):toUpperCase!>
 Spaces: <!SPACES:gsub( ,-):toLowerCase!>
 Empty Gsub: <!EMPTY_GSUB:gsub( ,_):toUpperCase!>`
 
-	if err := os.WriteFile(testFile, []byte(testContent), 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte(testContent), 0o644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
@@ -41,7 +41,7 @@ Empty Gsub: <!EMPTY_GSUB:gsub( ,_):toUpperCase!>`
   - key: EMPTY_GSUB
     value: This has spaces`
 
-	if err := os.WriteFile(valuesFile, []byte(valuesContent), 0644); err != nil {
+	if err := os.WriteFile(valuesFile, []byte(valuesContent), 0o644); err != nil {
 		t.Fatalf("failed to create values file: %v", err)
 	}
 

@@ -11,7 +11,9 @@
 
 **Template smarter**: Clone repos, replace tokens, or template existing projects — safely, with custom delimiters that won't clash with Helm, Jinja, or any other template language.
 
-![yankrun serve workbench: scan, fill placeholders, preview, apply](doc/serve-demo.gif)
+<p align="center">
+  <img src="doc/serve-demo.gif" alt="yankrun serve workbench: scan, fill placeholders, preview, apply" width="880">
+</p>
 
 ## TL;DR
 
@@ -49,8 +51,10 @@ yankrun template --dir ./project --input values.yaml --startDelim "<%" --endDeli
 - **Transformation functions** (`toUpperCase`, `toLowerCase`, `gsub`)
 - **Template file processing** (`.tpl` files processed and renamed)
 - **Caching** for `generate` - caches GitHub repos and template variables in `~/.yankrun/cache.yaml`
-- **Interactive workbench** (`serve`) for local/clone/generate workflows with file trees, evaluated transform previews, saved presets, JSON import/export, and in-browser custom delimiters
-- **Safe terminal workflow** (`tui`) for preview-first directory templating
+- **Interactive workbench** (`serve`) — brand-themed dark UI with file trees, evaluated transform previews, per-file dry-run diffs, saved presets, JSON import/export, and in-browser custom delimiters
+- **Full-screen TUI** (`tui`) — the terminal twin of `serve`: scan → fill → preview diffs → apply
+- **Optional `yankrun.yaml` manifest** — declare variables (description, default, required, enum, pattern) for validated prompts and agent self-discovery
+- **Agent-friendly** — `scan` command, `--json` output, stdin/`YANKRUN_VAR_*` value injection, a stable exit-code taxonomy, and a `yankrun mcp` server that exposes the engine over the Model Context Protocol
 
 ## Documentation
 
@@ -631,10 +635,17 @@ yankrun template --dir ./project --input values.yaml \
 
 ## Exit Codes
 
+Stable taxonomy — scripts and agents can branch on these.
+
 | Code | Meaning |
 |------|---------|
 | `0` | Success |
-| `1` | Error (invalid flags, clone failed, etc.) |
+| `1` | Unexpected internal error |
+| `2` | Usage error (bad flags / invalid invocation) |
+| `3` | Invalid input values or manifest violation (e.g. missing required in non-interactive mode) |
+| `4` | Directory, template, or branch not found |
+| `5` | Git clone / network failure |
+| `130` | User cancelled an interactive prompt |
 
 ---
 

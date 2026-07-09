@@ -18,7 +18,7 @@ ignore_patterns:
   - "vendor/*"`
 
 	path := filepath.Join(dir, "values.yaml")
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -47,7 +47,7 @@ func TestParseJSON(t *testing.T) {
 	content := `{"variables": [{"key": "APP", "value": "MyApp"}], "ignore_patterns": ["*.lock"]}`
 
 	path := filepath.Join(dir, "values.json")
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -72,7 +72,7 @@ func TestParseYML(t *testing.T) {
     value: Y`
 
 	path := filepath.Join(dir, "values.yml")
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -90,7 +90,7 @@ func TestParseYML(t *testing.T) {
 func TestParseUnsupportedFormat(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "values.toml")
-	if err := os.WriteFile(path, []byte("key = 'value'"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("key = 'value'"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -104,7 +104,7 @@ func TestParseUnsupportedFormat(t *testing.T) {
 func TestParseInvalidYAML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.yaml")
-	if err := os.WriteFile(path, []byte("{{invalid yaml"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("{{invalid yaml"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -118,7 +118,7 @@ func TestParseInvalidYAML(t *testing.T) {
 func TestParseInvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.json")
-	if err := os.WriteFile(path, []byte("{invalid json"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("{invalid json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -142,7 +142,7 @@ func TestParseEmptyVariables(t *testing.T) {
 	content := `variables: []`
 
 	path := filepath.Join(dir, "empty.yaml")
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

@@ -1,4 +1,4 @@
-.PHONY: all build clean version
+.PHONY: all build build-local test clean version
 
 GOOS_ARCH := linux/amd64 linux/arm64 linux/386 linux/arm darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 windows/386
 DIST_DIR := dist
@@ -33,6 +33,17 @@ build:
 		GOOS=$$os GOARCH=$$arch go build $(LDFLAGS) -o $$bin_path .; \
 	done
 	@echo "Build complete. Binaries in $(DIST_DIR)/"
+
+# build-local builds a single binary for the host into bin/yankrun.
+build-local:
+	@mkdir -p bin
+	go build $(LDFLAGS) -o bin/yankrun .
+	@echo "Built bin/yankrun ($(VERSION))"
+
+# test runs the full suite with the race detector. Integration tests build and
+# exercise the real binary and may reach the network (clone/generate).
+test:
+	go test -race ./...
 
 clean:
 	@echo "Cleaning build artifacts..."

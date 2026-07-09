@@ -37,7 +37,7 @@ func repoRoot(t *testing.T) string {
 func writeFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write %s: %v", name, err)
 	}
 	return path
@@ -126,9 +126,9 @@ func TestTemplateNonInteractive(t *testing.T) {
 	}
 
 	// Add a node_modules file and a large file to verify skipping behavior
-	_ = os.MkdirAll(filepath.Join(work, "node_modules"), 0700)
-	_ = os.WriteFile(filepath.Join(work, "node_modules", "keep.txt"), []byte("[[APP_NAME]]"), 0600)
-	_ = os.WriteFile(filepath.Join(work, "large.txt"), []byte(strings.Repeat("[[APP_NAME]]", 20000)), 0600)
+	_ = os.MkdirAll(filepath.Join(work, "node_modules"), 0o700)
+	_ = os.WriteFile(filepath.Join(work, "node_modules", "keep.txt"), []byte("[[APP_NAME]]"), 0o600)
+	_ = os.WriteFile(filepath.Join(work, "large.txt"), []byte(strings.Repeat("[[APP_NAME]]", 20000)), 0o600)
 
 	// now template the directory non-interactively
 	tmpl := exec.Command(bin, "template",

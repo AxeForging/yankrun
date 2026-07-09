@@ -1,12 +1,13 @@
 package actions
 
 import (
-	"fmt"
+	"context"
 
 	"github.com/AxeForging/yankrun/domain"
+	"github.com/AxeForging/yankrun/helpers"
 	"github.com/AxeForging/yankrun/internal/tui"
 	"github.com/AxeForging/yankrun/services"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
 type TUIAction struct {
@@ -19,20 +20,23 @@ func NewTUIAction(fs services.FileSystem, parser services.ReplacementParser, rep
 	return &TUIAction{fs: fs, parser: parser, replacer: replacer}
 }
 
-func (a *TUIAction) Execute(c *cli.Context) error {
-	dir := c.String("dir")
+func (a *TUIAction) Execute(_ context.Context, cmd *cli.Command) error {
+	dir := cmd.String("dir")
 	if dir == "" {
-		return fmt.Errorf("--dir is required for tui command")
+		return helpers.UsageErr("--dir is required for tui command")
 	}
-	if c.Bool("onlyTemplates") && !c.Bool("processTemplates") {
-		return fmt.Errorf("--onlyTemplates requires --processTemplates to be set")
+	if cmd.Bool("onlyTemplates") && !cmd.Bool("processTemplates") {
+		return helpers.UsageErr("--onlyTemplates requires --processTemplates to be set")
+	}
+	if !helpers.IsInteractive() {
+		return helpers.UsageErr("tui requires an interactive terminal; use 'template', 'scan --json', or 'serve' for non-interactive workflows")
 	}
 
 	cfg, _ := services.Load()
-	startDelim, endDelim, fileSizeLimit := templateSettings(c, cfg)
+	startDelim, endDelim, fileSizeLimit := templateSettings(cmd, cfg)
 
 	var provided domain.InputReplacement
-	if input := c.String("input"); input != "" {
+	if input := cmd.String("input"); input != "" {
 		parsed, err := a.parser.Parse(input)
 		if err != nil {
 			return err
@@ -45,11 +49,11 @@ func (a *TUIAction) Execute(c *cli.Context) error {
 		StartDelim:       startDelim,
 		EndDelim:         endDelim,
 		FileSizeLimit:    fileSizeLimit,
-		IgnorePatterns:   append(c.StringSlice("ignore"), provided.IgnorePath...),
-		ProcessTemplates: c.Bool("processTemplates"),
-		OnlyTemplates:    c.Bool("onlyTemplates"),
-		DryRun:           c.Bool("dryRun"),
-		Verbose:          c.Bool("verbose"),
+		IgnorePatterns:   append(cmd.StringSlice("ignore"), provided.IgnorePath...),
+		ProcessTemplates: cmd.Bool("processTemplates"),
+		OnlyTemplates:    cmd.Bool("onlyTemplates"),
+		DryRun:           cmd.Bool("dryRun"),
+		Verbose:          cmd.Bool("verbose"),
 		Provided:         provided,
 		Replacer:         a.replacer,
 	})

@@ -269,7 +269,7 @@ func TestReplaceInDir(t *testing.T) {
 	dir := t.TempDir()
 
 	content := "Hello [[NAME]], welcome to [[PROJECT]]!"
-	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -300,7 +300,7 @@ func TestReplaceInDir(t *testing.T) {
 func TestReplaceInDirPreservesPermissions(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "script.sh")
-	if err := os.WriteFile(path, []byte("echo [[NAME]]"), 0755); err != nil {
+	if err := os.WriteFile(path, []byte("echo [[NAME]]"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -317,7 +317,7 @@ func TestReplaceInDirPreservesPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := info.Mode().Perm(); got != 0755 {
+	if got := info.Mode().Perm(); got != 0o755 {
 		t.Fatalf("mode = %o, want 755", got)
 	}
 }
@@ -326,10 +326,10 @@ func TestReplaceInDirWithIgnorePatterns(t *testing.T) {
 	dir := t.TempDir()
 
 	content := "Hello [[NAME]]!"
-	if err := os.WriteFile(filepath.Join(dir, "keep.txt"), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "keep.txt"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "skip.generated.txt"), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "skip.generated.txt"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -359,10 +359,10 @@ func TestReplaceInDirWithIgnorePatterns(t *testing.T) {
 func TestAnalyzeDirWithIgnorePatterns(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := os.WriteFile(filepath.Join(dir, "main.txt"), []byte("[[NAME]] [[NAME]]"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "main.txt"), []byte("[[NAME]] [[NAME]]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "skip.gen.txt"), []byte("[[NAME]]"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "skip.gen.txt"), []byte("[[NAME]]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -379,7 +379,7 @@ func TestAnalyzeDirWithIgnorePatterns(t *testing.T) {
 
 func TestAnalyzeDirCustomDelimiters(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("<!APP!> and <!VERSION!>"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("<!APP!> and <!VERSION!>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -410,13 +410,13 @@ Port: [[PORT]]`
 	tplFile2 := filepath.Join(tempDir, "config.tpl")
 	regularFile := filepath.Join(tempDir, "regular.txt")
 
-	if err := os.WriteFile(tplFile1, []byte(tplContent1), 0644); err != nil {
+	if err := os.WriteFile(tplFile1, []byte(tplContent1), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	if err := os.WriteFile(tplFile2, []byte(tplContent2), 0644); err != nil {
+	if err := os.WriteFile(tplFile2, []byte(tplContent2), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	if err := os.WriteFile(regularFile, []byte("This is a regular file"), 0644); err != nil {
+	if err := os.WriteFile(regularFile, []byte("This is a regular file"), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -495,7 +495,7 @@ Port: 8080`
 func TestProcessTemplateFilesPreservesPermissions(t *testing.T) {
 	tempDir := t.TempDir()
 	tplFile := filepath.Join(tempDir, "script.sh.tpl")
-	if err := os.WriteFile(tplFile, []byte("echo [[NAME]]"), 0755); err != nil {
+	if err := os.WriteFile(tplFile, []byte("echo [[NAME]]"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -512,7 +512,7 @@ func TestProcessTemplateFilesPreservesPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := info.Mode().Perm(); got != 0755 {
+	if got := info.Mode().Perm(); got != 0o755 {
 		t.Fatalf("mode = %o, want 755", got)
 	}
 }
@@ -521,10 +521,10 @@ func TestProcessTemplateFilesErrorsWhenTargetExists(t *testing.T) {
 	tempDir := t.TempDir()
 	tplFile := filepath.Join(tempDir, "readme.md.tpl")
 	targetFile := filepath.Join(tempDir, "readme.md")
-	if err := os.WriteFile(tplFile, []byte("Hello [[NAME]]"), 0644); err != nil {
+	if err := os.WriteFile(tplFile, []byte("Hello [[NAME]]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(targetFile, []byte("existing"), 0644); err != nil {
+	if err := os.WriteFile(targetFile, []byte("existing"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -551,20 +551,20 @@ func TestProcessTemplateFilesWithSubdirectories(t *testing.T) {
 
 	subDir1 := filepath.Join(tempDir, "src")
 	subDir2 := filepath.Join(tempDir, "docs")
-	if err := os.MkdirAll(subDir1, 0755); err != nil {
+	if err := os.MkdirAll(subDir1, 0o755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
-	if err := os.MkdirAll(subDir2, 0755); err != nil {
+	if err := os.MkdirAll(subDir2, 0o755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 
 	tplFile1 := filepath.Join(subDir1, "main.tpl")
 	tplFile2 := filepath.Join(subDir2, "readme.tpl")
 
-	if err := os.WriteFile(tplFile1, []byte(`Source file: [[FILE_NAME]]`), 0644); err != nil {
+	if err := os.WriteFile(tplFile1, []byte(`Source file: [[FILE_NAME]]`), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	if err := os.WriteFile(tplFile2, []byte(`Documentation: [[DOC_TITLE]]`), 0644); err != nil {
+	if err := os.WriteFile(tplFile2, []byte(`Documentation: [[DOC_TITLE]]`), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -615,7 +615,7 @@ func TestProcessTemplateFilesSkipsIgnoredDirectories(t *testing.T) {
 	vendorDir := filepath.Join(tempDir, "vendor")
 
 	for _, d := range []string{gitDir, nodeModulesDir, vendorDir} {
-		if err := os.MkdirAll(d, 0755); err != nil {
+		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatalf("Failed to create directory: %v", err)
 		}
 	}
@@ -626,7 +626,7 @@ func TestProcessTemplateFilesSkipsIgnoredDirectories(t *testing.T) {
 	vendorTplFile := filepath.Join(vendorDir, "lib.tpl")
 
 	for _, f := range []string{gitTplFile, nodeTplFile, vendorTplFile} {
-		if err := os.WriteFile(f, []byte(tplContent), 0644); err != nil {
+		if err := os.WriteFile(f, []byte(tplContent), 0o644); err != nil {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 	}
@@ -661,7 +661,7 @@ Path: [[PATH:gsub( ,-)]]
 Mixed: [[MIXED:toLowerCase:gsub(test,prod)]]`
 
 	tplFile := filepath.Join(tempDir, "app.tpl")
-	if err := os.WriteFile(tplFile, []byte(tplContent), 0644); err != nil {
+	if err := os.WriteFile(tplFile, []byte(tplContent), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -710,13 +710,13 @@ This is a template file with [[PROJECT_NAME]].`
 	regularFile := filepath.Join(tempDir, "regular.txt")
 	anotherRegularFile := filepath.Join(tempDir, "config.json")
 
-	if err := os.WriteFile(tplFile, []byte(tplContent), 0644); err != nil {
+	if err := os.WriteFile(tplFile, []byte(tplContent), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	if err := os.WriteFile(regularFile, []byte(regularContent), 0644); err != nil {
+	if err := os.WriteFile(regularFile, []byte(regularContent), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	if err := os.WriteFile(anotherRegularFile, []byte(`{"name": "[[NAME]]"}`), 0644); err != nil {
+	if err := os.WriteFile(anotherRegularFile, []byte(`{"name": "[[NAME]]"}`), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 

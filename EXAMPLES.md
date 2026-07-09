@@ -150,6 +150,45 @@ Constant: MY APP
 URL slug: my-project
 ```
 
+## Agent & scripting recipes
+
+Discover what a template needs, then apply — no temp files, no prompts:
+
+```sh
+# 1. Learn the variables (and manifest) as JSON
+yankrun scan --dir ./project --json | jq '.data.keys, .data.manifest.variables'
+
+# 2. Apply values piped from stdin, machine-readable result, never prompts
+echo '{"variables":[{"key":"APP_NAME","value":"Widget"}]}' \
+  | yankrun template --dir ./project --input - --yes --json
+
+# 3. Or inject values from the environment
+YANKRUN_VAR_APP_NAME=Widget YANKRUN_VAR_ENV=prod \
+  yankrun template --dir ./project --yes --json
+```
+
+Preview the exact edits without writing — the dry-run JSON carries per-file diffs:
+
+```sh
+yankrun template --dir ./project --input values.yaml --dryRun --json \
+  | jq -r '.data.summary.files[] | .diff'
+```
+
+Re-running is idempotent: once placeholders are replaced, a second apply reports
+`0` matches and exits `0`.
+
+### Drive it from an MCP agent
+
+Register the stdio server with your MCP client (e.g. Claude Code):
+
+```json
+{ "mcpServers": { "yankrun": { "command": "yankrun", "args": ["mcp"] } } }
+```
+
+The agent can then call `yankrun_scan`, `yankrun_apply` (with `dryRun` for
+diffs), `yankrun_clone`, `yankrun_generate`, `yankrun_manifest`, and
+`yankrun_templates` directly.
+
 ## Save and reuse presets in `serve`
 
 1. Run `yankrun serve --dir ./project --input values.yaml`.

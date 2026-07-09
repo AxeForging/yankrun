@@ -1,17 +1,16 @@
 package actions
 
 import (
-	"bufio"
-	"fmt"
+	"context"
 	"os"
-	"sort"
-	"strings"
 
 	"github.com/AxeForging/yankrun/domain"
 	"github.com/AxeForging/yankrun/helpers"
+	"github.com/AxeForging/yankrun/internal/schema"
+	"github.com/AxeForging/yankrun/internal/workflow"
 	"github.com/AxeForging/yankrun/services"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
 type TemplateAction struct {
@@ -24,130 +23,60 @@ func NewTemplateAction(fs services.FileSystem, parser services.ReplacementParser
 	return &TemplateAction{fs: fs, parser: parser, replacer: replacer}
 }
 
-func (t *TemplateAction) Execute(c *cli.Context) error {
-	inputFile := c.String("input")
-	dir := c.String("dir")
-	verbose := c.Bool("verbose")
-	interactive := c.Bool("interactive")
-	processTemplates := c.Bool("processTemplates")
-	onlyTemplates := c.Bool("onlyTemplates")
-	dryRun := c.Bool("dryRun")
-	ignoreFlags := c.StringSlice("ignore")
+func (t *TemplateAction) Execute(_ context.Context, cmd *cli.Command) error {
+	jsonOut := cmd.Bool("json")
+	if jsonOut {
+		helpers.SetupLogger("warn")
+	}
 
+	result, manifest, dryRun, err := t.run(cmd)
+
+	if jsonOut {
+		return schema.Emit(os.Stdout, "template", result, err)
+	}
+	if err != nil {
+		return err
+	}
+	printApply(result, manifest, dryRun)
+	return nil
+}
+
+func (t *TemplateAction) run(cmd *cli.Command) (workflow.ApplyResult, *domain.Manifest, bool, error) {
+	dir := cmd.String("dir")
 	if dir == "" {
-		return fmt.Errorf("--dir is required for template command")
+		return workflow.ApplyResult{}, nil, false, helpers.UsageErr("--dir is required for template command")
+	}
+	if cmd.Bool("onlyTemplates") && !cmd.Bool("processTemplates") {
+		return workflow.ApplyResult{}, nil, false, helpers.UsageErr("--onlyTemplates requires --processTemplates to be set")
 	}
 
-	// Validate flag combination
-	if onlyTemplates && !processTemplates {
-		return fmt.Errorf("--onlyTemplates requires --processTemplates to be set")
-	}
-
-	// Load defaults from config
 	cfg, _ := services.Load()
 	if cfg == nil {
 		cfg = &domain.Config{}
 	}
-	startDelim, endDelim, fileSizeLimit := templateSettings(c, cfg)
+	startDelim, endDelim, fileSizeLimit := templateSettings(cmd, cfg)
 
-	var parsed domain.InputReplacement
-	var err error
-	if inputFile != "" {
-		parsed, err = t.parser.Parse(inputFile)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Merge ignore patterns from flags and input file
-	ignorePatterns := append(ignoreFlags, parsed.IgnorePath...)
-
-	// Analyze placeholders in dir
-	counts, err := t.replacer.AnalyzeDir(dir, fileSizeLimit, startDelim, endDelim, onlyTemplates, ignorePatterns)
+	provided, err := parseInput(t.parser, cmd.String("input"))
 	if err != nil {
-		return err
-	}
-	if len(counts) == 0 {
-		helpers.Log.Info().Msg("No placeholders found.")
-		return nil
+		return workflow.ApplyResult{}, nil, false, err
 	}
 
-	// Merge existing values from parsed file
-	values := map[string]string{}
-	for _, r := range parsed.Variables {
-		values[r.Key] = r.Value
-	}
-
-	// Pretty print summary
-	keys := make([]string, 0, len(counts))
-	for k := range counts {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	helpers.Log.Info().Msg("Discovered placeholders:")
-	for _, k := range keys {
-		v := values[k]
-		if v == "" {
-			v = "(unset)"
-		}
-		fmt.Printf("  %-24s  matches=%-6d  value=%s\n", k, counts[k], v)
-	}
-
-	// Interactive prompt for missing values
-	if interactive {
-		r := bufio.NewReader(os.Stdin)
-		for _, k := range keys {
-			def := values[k]
-			fmt.Printf("Enter value for %s [%s]: ", k, def)
-			s, _ := r.ReadString('\n')
-			s = strings.TrimSpace(s)
-			if s != "" {
-				values[k] = s
-			}
-		}
-		fmt.Println()
-	}
-
-	// Build replacements with final values (use only discovered keys)
-	final := domain.InputReplacement{}
-	for _, k := range keys {
-		if v, ok := values[k]; ok && v != "" {
-			final.Variables = append(final.Variables, domain.Replacement{Key: k, Value: v})
-		}
-	}
-
-	if len(final.Variables) == 0 {
-		helpers.Log.Info().Msg("No values provided; nothing to replace.")
-		return nil
-	}
-
-	// Dry-run: show summary and exit without writing
-	if dryRun {
-		totalMatches := 0
-		for _, k := range keys {
-			if _, ok := values[k]; ok {
-				totalMatches += counts[k]
-			}
-		}
-		helpers.Log.Info().Msgf("Dry run: %d replacements across %d placeholders would be applied. No files modified.", totalMatches, len(final.Variables))
-		return nil
-	}
-
-	// Skip regular templating if onlyTemplates is set
-	if !onlyTemplates {
-		if err := t.replacer.ReplaceInDir(dir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
-			return err
-		}
-	}
-
-	// Process .tpl files if requested
-	if processTemplates {
-		if err := t.replacer.ProcessTemplateFiles(dir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
-			return err
-		}
-		helpers.Log.Info().Msg("Template file processing complete.")
-	}
-
-	helpers.Log.Info().Msg("Templating complete.")
-	return nil
+	engine := workflow.Engine{Parser: t.parser, Replacer: t.replacer}
+	dryRun := cmd.Bool("dryRun")
+	result, manifest, err := runApply(engine, applyOptions{
+		dir:      dir,
+		provided: provided,
+		settings: workflow.TemplateSettings{
+			StartDelim:       startDelim,
+			EndDelim:         endDelim,
+			FileSizeLimit:    fileSizeLimit,
+			ProcessTemplates: cmd.Bool("processTemplates"),
+			OnlyTemplates:    cmd.Bool("onlyTemplates"),
+			Verbose:          cmd.Bool("verbose"),
+			IgnorePatterns:   append(cmd.StringSlice("ignore"), provided.IgnorePath...),
+		},
+		interactive: cmd.Bool("interactive") && !cmd.Bool("json") && !cmd.Bool("yes"),
+		dryRun:      dryRun,
+	})
+	return result, manifest, dryRun, err
 }

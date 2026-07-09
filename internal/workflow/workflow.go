@@ -27,16 +27,18 @@ type TemplateSettings struct {
 }
 
 type Summary struct {
-	Counts map[string]int    `json:"counts"`
-	Files  []FileSummary     `json:"files"`
-	Keys   []string          `json:"keys"`
-	Values map[string]string `json:"values"`
+	Counts   map[string]int    `json:"counts"`
+	Files    []FileSummary     `json:"files"`
+	Keys     []string          `json:"keys"`
+	Values   map[string]string `json:"values"`
+	Manifest *domain.Manifest  `json:"manifest,omitempty"`
 }
 
 type FileSummary struct {
 	Path     string         `json:"path"`
 	Counts   map[string]int `json:"counts"`
 	Previews []ValuePreview `json:"previews"`
+	Diff     string         `json:"diff,omitempty"`
 }
 
 type ValuePreview struct {
@@ -63,22 +65,86 @@ func (e Engine) LoadInput(input string) (domain.InputReplacement, error) {
 	return e.Parser.Parse(input)
 }
 
+// LoadManifest reads the optional yankrun.yaml manifest from dir. It returns
+// (nil, nil) when no manifest is present.
+func (e Engine) LoadManifest(dir string) (*domain.Manifest, error) {
+	return services.LoadManifest(dir)
+}
+
+// withManifest loads the manifest for dir and folds its ignore patterns into
+// settings. Both returned values are safe to use even when no manifest exists.
+func (e Engine) withManifest(dir string, settings TemplateSettings) (TemplateSettings, *domain.Manifest, error) {
+	manifest, err := e.LoadManifest(dir)
+	if err != nil {
+		return settings, nil, err
+	}
+	if manifest != nil && len(manifest.IgnorePatterns) > 0 {
+		settings.IgnorePatterns = append(append([]string{}, settings.IgnorePatterns...), manifest.IgnorePatterns...)
+	}
+	return settings, manifest, nil
+}
+
 func (e Engine) ScanDir(dir string, settings TemplateSettings, provided domain.InputReplacement) (Summary, error) {
+	settings, manifest, err := e.withManifest(dir, settings)
+	if err != nil {
+		return Summary{}, err
+	}
 	files, err := e.Replacer.AnalyzeDirDetails(dir, settings.FileSizeLimit, settings.StartDelim, settings.EndDelim, settings.OnlyTemplates, settings.IgnorePatterns)
 	if err != nil {
 		return Summary{}, err
 	}
 	summary := Summarize(files, provided)
+	summary.Manifest = manifest
+	applyDefaults(&summary, manifest)
 	e.EvaluateSummary(&summary, files, summary.Values)
 	return summary, nil
 }
 
+// applyDefaults fills manifest defaults for discovered keys that have no value
+// yet. Defaults are the lowest-precedence source, so any provided value wins.
+func applyDefaults(summary *Summary, manifest *domain.Manifest) {
+	if manifest == nil {
+		return
+	}
+	for k, def := range manifest.Defaults() {
+		if summary.Values[k] == "" {
+			summary.Values[k] = def
+		}
+	}
+}
+
+// ResolveValues merges value sources by precedence, lowest to highest:
+// manifest defaults < input file < environment (YANKRUN_VAR_*) < interactive
+// answers. Empty values never override a value already set by a lower source.
+func ResolveValues(manifest *domain.Manifest, file, env, answers map[string]string) map[string]string {
+	out := map[string]string{}
+	if manifest != nil {
+		for k, v := range manifest.Defaults() {
+			out[k] = v
+		}
+	}
+	for _, src := range []map[string]string{file, env, answers} {
+		for k, v := range src {
+			if v != "" {
+				out[k] = v
+			}
+		}
+	}
+	return out
+}
+
 func (e Engine) ApplyDir(dir string, settings TemplateSettings, provided domain.InputReplacement, values map[string]string, dryRun bool, forceDryRun bool) (ApplyResult, error) {
+	settings, manifest, err := e.withManifest(dir, settings)
+	if err != nil {
+		return ApplyResult{}, err
+	}
 	files, err := e.Replacer.AnalyzeDirDetails(dir, settings.FileSizeLimit, settings.StartDelim, settings.EndDelim, settings.OnlyTemplates, settings.IgnorePatterns)
 	if err != nil {
 		return ApplyResult{}, err
 	}
 	summary := Summarize(files, provided)
+	summary.Manifest = manifest
+	applyDefaults(&summary, manifest)
 	merged := MergeValues(summary.Values, values)
 	summary.Values = merged
 	e.EvaluateSummary(&summary, files, merged)
@@ -91,6 +157,9 @@ func (e Engine) ApplyDir(dir string, settings TemplateSettings, provided domain.
 		Summary:      summary,
 	}
 	if dryRun || forceDryRun || len(final.Variables) == 0 {
+		// Preview mode: attach per-file diffs so callers can show exactly what
+		// would change without writing anything.
+		e.attachDiffs(dir, settings, &result.Summary, final)
 		return result, nil
 	}
 	if err := e.ApplyFinal(dir, settings, final); err != nil {
