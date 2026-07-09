@@ -5,11 +5,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/AxeForging/yankrun/domain"
 	"github.com/AxeForging/yankrun/helpers"
+	"github.com/AxeForging/yankrun/internal/ui"
+	"github.com/AxeForging/yankrun/internal/workflow"
 	"github.com/AxeForging/yankrun/services"
 
 	"github.com/urfave/cli/v3"
@@ -26,129 +27,104 @@ func NewTemplateAction(fs services.FileSystem, parser services.ReplacementParser
 }
 
 func (t *TemplateAction) Execute(_ context.Context, cmd *cli.Command) error {
-	inputFile := cmd.String("input")
 	dir := cmd.String("dir")
-	verbose := cmd.Bool("verbose")
-	interactive := cmd.Bool("interactive")
-	processTemplates := cmd.Bool("processTemplates")
-	onlyTemplates := cmd.Bool("onlyTemplates")
-	dryRun := cmd.Bool("dryRun")
-	ignoreFlags := cmd.StringSlice("ignore")
-
 	if dir == "" {
 		return helpers.UsageErr("--dir is required for template command")
 	}
-
-	// Validate flag combination
-	if onlyTemplates && !processTemplates {
+	if cmd.Bool("onlyTemplates") && !cmd.Bool("processTemplates") {
 		return helpers.UsageErr("--onlyTemplates requires --processTemplates to be set")
 	}
 
-	// Load defaults from config
 	cfg, _ := services.Load()
 	if cfg == nil {
 		cfg = &domain.Config{}
 	}
 	startDelim, endDelim, fileSizeLimit := templateSettings(cmd, cfg)
 
-	var parsed domain.InputReplacement
-	var err error
-	if inputFile != "" {
-		parsed, err = t.parser.Parse(inputFile)
+	// Parse the optional values file.
+	var provided domain.InputReplacement
+	if inputFile := cmd.String("input"); inputFile != "" {
+		parsed, err := t.parser.Parse(inputFile)
 		if err != nil {
-			return err
+			return helpers.ValidationErr("%v", err)
 		}
+		provided = parsed
 	}
 
-	// Merge ignore patterns from flags and input file
-	ignorePatterns := append(ignoreFlags, parsed.IgnorePath...)
+	engine := workflow.Engine{Parser: t.parser, Replacer: t.replacer}
+	settings := workflow.TemplateSettings{
+		StartDelim:       startDelim,
+		EndDelim:         endDelim,
+		FileSizeLimit:    fileSizeLimit,
+		ProcessTemplates: cmd.Bool("processTemplates"),
+		OnlyTemplates:    cmd.Bool("onlyTemplates"),
+		Verbose:          cmd.Bool("verbose"),
+		IgnorePatterns:   append(cmd.StringSlice("ignore"), provided.IgnorePath...),
+	}
 
-	// Analyze placeholders in dir
-	counts, err := t.replacer.AnalyzeDir(dir, fileSizeLimit, startDelim, endDelim, onlyTemplates, ignorePatterns)
+	// Scan first so we know the discovered keys and any manifest metadata.
+	summary, err := engine.ScanDir(dir, settings, provided)
 	if err != nil {
 		return err
 	}
-	if len(counts) == 0 {
+	if len(summary.Keys) == 0 {
 		helpers.Log.Info().Msg("No placeholders found.")
 		return nil
 	}
+	ui.PrintScanSummary(os.Stdout, summary)
 
-	// Merge existing values from parsed file
+	// Resolve values by precedence: manifest defaults < file < env < prompts.
+	fileValues := valuesFromInput(provided)
+	envValues := services.EnvValues()
+	answers := map[string]string{}
+	if cmd.Bool("interactive") && helpers.IsInteractive() {
+		base := workflow.ResolveValues(summary.Manifest, fileValues, envValues, nil)
+		answers = promptForValues(summary.Keys, base)
+	}
+	resolved := workflow.ResolveValues(summary.Manifest, fileValues, envValues, answers)
+
+	// Validate against the manifest before touching any files.
+	if err := services.ValidateValues(summary.Manifest, resolved); err != nil {
+		return helpers.ValidationErr("%v", err)
+	}
+
+	dryRun := cmd.Bool("dryRun")
+	result, err := engine.ApplyDir(dir, settings, domain.InputReplacement{}, resolved, dryRun, false)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(os.Stdout)
+	ui.PrintApplyResult(os.Stdout, result, dryRun)
+	if !dryRun && result.Applied {
+		ui.PrintHints(os.Stdout, summary.Manifest)
+	}
+	return nil
+}
+
+// valuesFromInput flattens an InputReplacement into a key/value map.
+func valuesFromInput(in domain.InputReplacement) map[string]string {
 	values := map[string]string{}
-	for _, r := range parsed.Variables {
+	for _, r := range in.Variables {
 		values[r.Key] = r.Value
 	}
+	return values
+}
 
-	// Pretty print summary
-	keys := make([]string, 0, len(counts))
-	for k := range counts {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	helpers.Log.Info().Msg("Discovered placeholders:")
+// promptForValues asks for each key with the resolved value as the default.
+// This bufio flow is the interim; the huh-based form replaces it in a later
+// milestone. It only runs on a real terminal.
+func promptForValues(keys []string, base map[string]string) map[string]string {
+	answers := map[string]string{}
+	r := bufio.NewReader(os.Stdin)
 	for _, k := range keys {
-		v := values[k]
-		if v == "" {
-			v = "(unset)"
-		}
-		fmt.Printf("  %-24s  matches=%-6d  value=%s\n", k, counts[k], v)
-	}
-
-	// Interactive prompt for missing values
-	if interactive {
-		r := bufio.NewReader(os.Stdin)
-		for _, k := range keys {
-			def := values[k]
-			fmt.Printf("Enter value for %s [%s]: ", k, def)
-			s, _ := r.ReadString('\n')
-			s = strings.TrimSpace(s)
-			if s != "" {
-				values[k] = s
-			}
-		}
-		fmt.Println()
-	}
-
-	// Build replacements with final values (use only discovered keys)
-	final := domain.InputReplacement{}
-	for _, k := range keys {
-		if v, ok := values[k]; ok && v != "" {
-			final.Variables = append(final.Variables, domain.Replacement{Key: k, Value: v})
+		def := base[k]
+		fmt.Printf("Enter value for %s [%s]: ", k, def)
+		s, _ := r.ReadString('\n')
+		if s = strings.TrimSpace(s); s != "" {
+			answers[k] = s
 		}
 	}
-
-	if len(final.Variables) == 0 {
-		helpers.Log.Info().Msg("No values provided; nothing to replace.")
-		return nil
-	}
-
-	// Dry-run: show summary and exit without writing
-	if dryRun {
-		totalMatches := 0
-		for _, k := range keys {
-			if _, ok := values[k]; ok {
-				totalMatches += counts[k]
-			}
-		}
-		helpers.Log.Info().Msgf("Dry run: %d replacements across %d placeholders would be applied. No files modified.", totalMatches, len(final.Variables))
-		return nil
-	}
-
-	// Skip regular templating if onlyTemplates is set
-	if !onlyTemplates {
-		if err := t.replacer.ReplaceInDir(dir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
-			return err
-		}
-	}
-
-	// Process .tpl files if requested
-	if processTemplates {
-		if err := t.replacer.ProcessTemplateFiles(dir, final, fileSizeLimit, startDelim, endDelim, verbose, ignorePatterns); err != nil {
-			return err
-		}
-		helpers.Log.Info().Msg("Template file processing complete.")
-	}
-
-	helpers.Log.Info().Msg("Templating complete.")
-	return nil
+	fmt.Println()
+	return answers
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/AxeForging/yankrun/domain"
 	"github.com/AxeForging/yankrun/internal/workflow"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -43,6 +44,19 @@ func PrintApplyResult(w io.Writer, r workflow.ApplyResult, dryRun bool) {
 		writeLines(w, StatusOK("Applied "+totals+"."))
 	default:
 		writeLines(w, StatusInfo("Nothing to apply."))
+	}
+}
+
+// PrintHints renders a manifest's post-generate hints as a "Next steps"
+// section. It is a no-op when the manifest has none.
+func PrintHints(w io.Writer, manifest *domain.Manifest) {
+	if manifest == nil || len(manifest.PostGenerate.Hints) == 0 {
+		return
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, SectionHeader("Next steps"))
+	for _, hint := range manifest.PostGenerate.Hints {
+		fmt.Fprintln(w, "  "+Accent.Render(GlyphDot)+" "+hint)
 	}
 }
 
