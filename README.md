@@ -11,7 +11,9 @@
 
 **Template smarter**: Clone repos, replace tokens, or template existing projects — safely, with custom delimiters that won't clash with Helm, Jinja, or any other template language.
 
-![yankrun serve workbench: scan, fill placeholders, preview, apply](doc/serve-demo.gif)
+<p align="center">
+  <img src="doc/serve-demo.gif" alt="yankrun serve workbench: scan, fill placeholders, preview, apply" width="880">
+</p>
 
 ## TL;DR
 
