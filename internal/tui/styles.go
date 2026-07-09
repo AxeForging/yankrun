@@ -23,11 +23,6 @@ var (
 	helpBar = lipgloss.NewStyle().
 		Foreground(mutedC).
 		Padding(0, 1)
-
-	panelStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(mutedC).
-			Padding(0, 1)
 )
 
 const mark = "⟦y⟧"

@@ -9,3 +9,4 @@ coverage/
 /.tmp
 .claude/
 .playwright-mcp/
+bin/

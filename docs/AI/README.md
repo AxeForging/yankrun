@@ -261,16 +261,39 @@ yankrun clone --repo <url> --outputDir /tmp/test --input values.yaml --verbose
 
 ## Dependencies
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `github.com/urfave/cli` | v1.22.17 | CLI framework |
-| `github.com/go-git/go-git/v5` | v5.16.4 | Pure Go git implementation |
-| `github.com/rs/zerolog` | v1.34.0 | Structured logging |
-| `gopkg.in/yaml.v3` | v3.0.1 | YAML parsing |
-| `github.com/mitchellh/go-homedir` | v1.1.0 | Home directory resolution |
-| `golang.org/x/crypto` | v0.47.0 | Cryptographic operations |
+| Package | Purpose |
+|---------|---------|
+| `github.com/urfave/cli/v3` | CLI framework (context-aware; migrated from v1) |
+| `github.com/go-git/go-git/v5` | Pure Go git implementation |
+| `github.com/rs/zerolog` | Structured logging (stderr) |
+| `github.com/charmbracelet/{bubbletea,bubbles,lipgloss,huh}` | TUI + interactive prompts + terminal theme |
+| `github.com/modelcontextprotocol/go-sdk` | MCP server (`yankrun mcp`) |
+| `github.com/pmezard/go-difflib` | Unified dry-run diffs |
+| `gopkg.in/yaml.v3` | YAML parsing |
+| `github.com/mitchellh/go-homedir` | Home directory resolution |
 
-All dependencies are kept up-to-date for security.
+Pin exact versions from `go.mod`; do not hardcode them here.
+
+---
+
+## Agent-facing contract
+
+The machine-readable surface is a stable, versioned contract — treat it as public API.
+
+- **JSON envelope** (`internal/schema`): every `--json` command prints one
+  `{schemaVersion, command, ok, data|error}` object to stdout. `data` wraps the
+  same `workflow.Summary` / `workflow.ApplyResult` structs the human path uses.
+- **Exit codes** (`helpers/exit.go`): 0 ok · 1 internal · 2 usage · 3 validation ·
+  4 not-found · 5 git · 130 cancelled. Constructors: `UsageErr`, `ValidationErr`,
+  `NotFoundErr`, `GitErr`, `CancelledErr`; mapped once in `main`'s `ExitErrHandler`.
+- **Value precedence** (`workflow.ResolveValues`): manifest defaults < `--input`
+  file (or stdin `-`) < `YANKRUN_VAR_*` env < interactive answers.
+- **Manifest** (`domain.Manifest`, `services.LoadManifest`/`ValidateValues`):
+  optional `yankrun.yaml`; drives prompts, validation, and `scan --json`.
+- **MCP** (`internal/mcp`): thin wrappers over `workflow.Engine`; outputs are the
+  same JSON-tagged types as `--json`.
+- **Non-interactive guarantee**: prompts (huh forms, the TUI) are gated behind
+  `helpers.IsInteractive()` so agents/CI never hang.
 
 ---
 

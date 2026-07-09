@@ -42,7 +42,7 @@ func init() {
 
 	timeFormat := "15:04:05"
 	if color {
-		timeFormat = "[90m15:04:05[0m"
+		timeFormat = "\x1b[90m15:04:05\x1b[0m"
 	}
 
 	output := zerolog.ConsoleWriter{
@@ -60,7 +60,7 @@ func init() {
 			if !color || code == "" {
 				return label
 			}
-			return "[" + code + "m" + label + "[0m"
+			return "\x1b[" + code + "m" + label + "\x1b[0m"
 		},
 		FormatMessage: func(i interface{}) string {
 			if i == nil {
