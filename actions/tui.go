@@ -28,6 +28,9 @@ func (a *TUIAction) Execute(_ context.Context, cmd *cli.Command) error {
 	if cmd.Bool("onlyTemplates") && !cmd.Bool("processTemplates") {
 		return helpers.UsageErr("--onlyTemplates requires --processTemplates to be set")
 	}
+	if !helpers.IsInteractive() {
+		return helpers.UsageErr("tui requires an interactive terminal; use 'template', 'scan --json', or 'serve' for non-interactive workflows")
+	}
 
 	cfg, _ := services.Load()
 	startDelim, endDelim, fileSizeLimit := templateSettings(cmd, cfg)

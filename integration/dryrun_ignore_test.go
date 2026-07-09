@@ -270,28 +270,32 @@ func TestTemplateUsesConfigDefaults(t *testing.T) {
 	}
 }
 
-func TestTUIDryRunDoesNotModifyFiles(t *testing.T) {
+// The TUI now requires a real terminal (it is a full-screen Bubble Tea app).
+// Driven non-interactively — as agents and CI do — it must refuse with a usage
+// error rather than hang or corrupt the terminal. The interactive behavior
+// (scan → fill → preview → apply) is covered by the teatest suite in
+// internal/tui.
+func TestTUIRequiresTTY(t *testing.T) {
 	bin := buildBinary(t)
 	testDir := t.TempDir()
 	path := filepath.Join(testDir, "app.txt")
 	if err := os.WriteFile(path, []byte("App: [[NAME]]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	valsPath := writeFile(t, t.TempDir(), "values.yaml", `variables: [{key: NAME, value: MyApp}]`)
 
-	cmd := exec.Command(bin, "tui", "--dir", testDir, "--input", valsPath, "--dryRun")
+	cmd := exec.Command(bin, "tui", "--dir", testDir)
 	cmd.Dir = repoRoot(t)
-	cmd.Stdin = strings.NewReader("\n")
+	cmd.Stdin = strings.NewReader("")
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("tui dry-run failed: %v\n%s", err, string(out))
+	code := 0
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		code = exitErr.ExitCode()
 	}
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
+	if code != 2 {
+		t.Fatalf("tui without a TTY: exit %d, want 2\n%s", code, string(out))
 	}
-	if string(got) != "App: [[NAME]]" {
-		t.Fatalf("tui dry-run modified file: %q", string(got))
+	if got, _ := os.ReadFile(path); string(got) != "App: [[NAME]]" {
+		t.Fatalf("tui must not modify files: %q", string(got))
 	}
 }
 
