@@ -34,6 +34,7 @@ func main() {
 	serveAction := actions.NewServeAction(fs, parser, replacer, cloner)
 	tuiAction := actions.NewTUIAction(fs, parser, replacer)
 	scanAction := actions.NewScanAction(fs, parser, replacer, cloner)
+	mcpAction := actions.NewMCPAction(parser, replacer, cloner, Version)
 
 	// Logger writes to stderr; data goes to stdout. Level is raised later when
 	// --json is set so machine output stays clean.
@@ -82,6 +83,11 @@ func main() {
 				Usage:  "Run the local web workbench for scanning, previewing, and applying values",
 				Flags:  []cli.Flag{inputFlag, dirFlag, addrFlag, verboseFlag, fileSizeLimitFlag, startDelimFlag, endDelimFlag, processTemplatesFlag, onlyTemplatesFlag, dryRunFlag, ignoreFlag},
 				Action: serveAction.Execute,
+			},
+			{
+				Name:   "mcp",
+				Usage:  "Serve the templating engine over the Model Context Protocol (stdio) for agents",
+				Action: mcpAction.Execute,
 			},
 			{
 				Name:  "setup",
