@@ -2,6 +2,7 @@ package actions
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -11,7 +12,7 @@ import (
 	"github.com/AxeForging/yankrun/helpers"
 	"github.com/AxeForging/yankrun/services"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
 type CloneAction struct {
@@ -30,19 +31,19 @@ func NewCloneAction(fs services.FileSystem, parser services.ReplacementParser, r
 	}
 }
 
-func (a *CloneAction) Execute(c *cli.Context) error {
-	repoURL := c.String("repo")
-	outputDir := c.String("outputDir")
-	verbose := c.Bool("verbose")
-	input := c.String("input")
-	branch := c.String("branch")
-	interactive := c.Bool("interactive")
-	processTemplates := c.Bool("processTemplates")
-	onlyTemplates := c.Bool("onlyTemplates")
-	dryRun := c.Bool("dryRun")
-	ignoreFlags := c.StringSlice("ignore")
+func (a *CloneAction) Execute(_ context.Context, cmd *cli.Command) error {
+	repoURL := cmd.String("repo")
+	outputDir := cmd.String("outputDir")
+	verbose := cmd.Bool("verbose")
+	input := cmd.String("input")
+	branch := cmd.String("branch")
+	interactive := cmd.Bool("interactive")
+	processTemplates := cmd.Bool("processTemplates")
+	onlyTemplates := cmd.Bool("onlyTemplates")
+	dryRun := cmd.Bool("dryRun")
+	ignoreFlags := cmd.StringSlice("ignore")
 
-	if sshKey := c.String("ssh-key"); sshKey != "" {
+	if sshKey := cmd.String("ssh-key"); sshKey != "" {
 		a.cloner.SetSSHKeyPath(sshKey)
 	}
 
@@ -51,18 +52,18 @@ func (a *CloneAction) Execute(c *cli.Context) error {
 	if cfg == nil {
 		cfg = &domain.Config{}
 	}
-	startDelim, endDelim, fileSizeLimit := templateSettings(c, cfg)
+	startDelim, endDelim, fileSizeLimit := templateSettings(cmd, cfg)
 
 	if repoURL == "" {
-		return fmt.Errorf("--repo is required for clone command")
+		return helpers.UsageErr("--repo is required for clone command")
 	}
 	if outputDir == "" && !dryRun {
-		return fmt.Errorf("--outputDir is required for clone command")
+		return helpers.UsageErr("--outputDir is required for clone command")
 	}
 
 	// Validate flag combination
 	if onlyTemplates && !processTemplates {
-		return fmt.Errorf("--onlyTemplates requires --processTemplates to be set")
+		return helpers.UsageErr("--onlyTemplates requires --processTemplates to be set")
 	}
 
 	workDir := outputDir
@@ -81,11 +82,11 @@ func (a *CloneAction) Execute(c *cli.Context) error {
 
 	if branch != "" {
 		if err := a.cloner.CloneRepositoryBranch(repoURL, branch, workDir); err != nil {
-			return err
+			return helpers.GitErr(err)
 		}
 	} else {
 		if err := a.cloner.CloneRepository(repoURL, workDir); err != nil {
-			return err
+			return helpers.GitErr(err)
 		}
 	}
 

@@ -12,7 +12,7 @@ import (
 	"github.com/AxeForging/yankrun/domain"
 	"github.com/AxeForging/yankrun/helpers"
 	"github.com/AxeForging/yankrun/services"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
 type GenerateAction struct {
@@ -27,27 +27,27 @@ func NewGenerateAction(fs services.FileSystem, cloner services.Cloner, parser se
 }
 
 // Execute: choose template repo/branch, clone, remove .git, then optionally prompt and apply replacements
-func (a *GenerateAction) Execute(c *cli.Context) error {
+func (a *GenerateAction) Execute(_ context.Context, cmd *cli.Command) error {
 	// parse flags first for non-interactive allowance
-	interactivePrompt := c.Bool("interactive")
-	input := c.String("input")
-	verbose := c.Bool("verbose")
-	outputDir := c.String("outputDir")
-	templateFilter := c.String("template")
-	branchFlag := c.String("branch")
-	processTemplates := c.Bool("processTemplates")
-	onlyTemplates := c.Bool("onlyTemplates")
-	dryRun := c.Bool("dryRun")
-	ignoreFlags := c.StringSlice("ignore")
-	noCache := c.Bool("noCache")
+	interactivePrompt := cmd.Bool("interactive")
+	input := cmd.String("input")
+	verbose := cmd.Bool("verbose")
+	outputDir := cmd.String("outputDir")
+	templateFilter := cmd.String("template")
+	branchFlag := cmd.String("branch")
+	processTemplates := cmd.Bool("processTemplates")
+	onlyTemplates := cmd.Bool("onlyTemplates")
+	dryRun := cmd.Bool("dryRun")
+	ignoreFlags := cmd.StringSlice("ignore")
+	noCache := cmd.Bool("noCache")
 
-	if sshKey := c.String("ssh-key"); sshKey != "" {
+	if sshKey := cmd.String("ssh-key"); sshKey != "" {
 		a.cloner.SetSSHKeyPath(sshKey)
 	}
 
 	// Validate flag combination
 	if onlyTemplates && !processTemplates {
-		return fmt.Errorf("--onlyTemplates requires --processTemplates to be set")
+		return helpers.UsageErr("--onlyTemplates requires --processTemplates to be set")
 	}
 
 	cfg, err := services.Load()
@@ -73,7 +73,7 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		_ = services.Save(cfg)
 	}
 
-	startDelim, endDelim, fileSizeLimit := templateSettings(c, cfg)
+	startDelim, endDelim, fileSizeLimit := templateSettings(cmd, cfg)
 
 	// Load cache
 	cache, _ := services.LoadCache()
@@ -112,7 +112,7 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		}
 	}
 	if len(repos) == 0 {
-		return fmt.Errorf("no templates configured or found")
+		return helpers.NotFoundErr("no templates configured or found")
 	}
 
 	// Build filtered set non-interactively first
@@ -127,7 +127,7 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 		filtered = repos
 	}
 	if len(filtered) == 0 {
-		return fmt.Errorf("no templates matched filter")
+		return helpers.NotFoundErr("no templates matched filter")
 	}
 
 	var chosen domain.TemplateRepo
@@ -283,7 +283,7 @@ func (a *GenerateAction) Execute(c *cli.Context) error {
 	}
 
 	if err := a.cloner.CloneRepositoryBranch(chosen.URL, br, workDir); err != nil {
-		return err
+		return helpers.GitErr(err)
 	}
 	if dryRun {
 		helpers.Log.Info().Msgf("Cloned %s@%s into temporary directory for dry run", chosen.Name, br)

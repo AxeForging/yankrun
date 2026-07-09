@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"context"
 	"fmt"
 	"net"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/AxeForging/yankrun/helpers"
 	"github.com/AxeForging/yankrun/internal/web"
 	"github.com/AxeForging/yankrun/services"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
 type ServeAction struct {
@@ -22,20 +23,20 @@ func NewServeAction(fs services.FileSystem, parser services.ReplacementParser, r
 	return &ServeAction{fs: fs, parser: parser, replacer: replacer, cloner: cloner}
 }
 
-func (a *ServeAction) Execute(c *cli.Context) error {
-	dir := c.String("dir")
+func (a *ServeAction) Execute(_ context.Context, cmd *cli.Command) error {
+	dir := cmd.String("dir")
 	if dir == "" {
-		return fmt.Errorf("--dir is required for serve command")
+		return helpers.UsageErr("--dir is required for serve command")
 	}
-	if c.Bool("onlyTemplates") && !c.Bool("processTemplates") {
-		return fmt.Errorf("--onlyTemplates requires --processTemplates to be set")
+	if cmd.Bool("onlyTemplates") && !cmd.Bool("processTemplates") {
+		return helpers.UsageErr("--onlyTemplates requires --processTemplates to be set")
 	}
 
 	cfg, _ := services.Load()
-	startDelim, endDelim, fileSizeLimit := templateSettings(c, cfg)
+	startDelim, endDelim, fileSizeLimit := templateSettings(cmd, cfg)
 
 	var provided domain.InputReplacement
-	if input := c.String("input"); input != "" {
+	if input := cmd.String("input"); input != "" {
 		parsed, err := a.parser.Parse(input)
 		if err != nil {
 			return err
@@ -43,7 +44,7 @@ func (a *ServeAction) Execute(c *cli.Context) error {
 		provided = parsed
 	}
 
-	addr := c.String("addr")
+	addr := cmd.String("addr")
 	if addr == "" {
 		addr = "127.0.0.1:17817"
 	}
@@ -54,15 +55,15 @@ func (a *ServeAction) Execute(c *cli.Context) error {
 	server, err := web.New(web.Options{
 		Addr:             addr,
 		Dir:              dir,
-		Input:            c.String("input"),
+		Input:            cmd.String("input"),
 		StartDelim:       startDelim,
 		EndDelim:         endDelim,
 		FileSizeLimit:    fileSizeLimit,
-		IgnorePatterns:   append(c.StringSlice("ignore"), provided.IgnorePath...),
-		ProcessTemplates: c.Bool("processTemplates"),
-		OnlyTemplates:    c.Bool("onlyTemplates"),
-		ForceDryRun:      c.Bool("dryRun"),
-		Verbose:          c.Bool("verbose"),
+		IgnorePatterns:   append(cmd.StringSlice("ignore"), provided.IgnorePath...),
+		ProcessTemplates: cmd.Bool("processTemplates"),
+		OnlyTemplates:    cmd.Bool("onlyTemplates"),
+		ForceDryRun:      cmd.Bool("dryRun"),
+		Verbose:          cmd.Bool("verbose"),
 		Parser:           a.parser,
 		Replacer:         a.replacer,
 		Cloner:           a.cloner,

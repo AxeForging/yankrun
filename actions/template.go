@@ -2,6 +2,7 @@ package actions
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -11,7 +12,7 @@ import (
 	"github.com/AxeForging/yankrun/helpers"
 	"github.com/AxeForging/yankrun/services"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
 type TemplateAction struct {
@@ -24,23 +25,23 @@ func NewTemplateAction(fs services.FileSystem, parser services.ReplacementParser
 	return &TemplateAction{fs: fs, parser: parser, replacer: replacer}
 }
 
-func (t *TemplateAction) Execute(c *cli.Context) error {
-	inputFile := c.String("input")
-	dir := c.String("dir")
-	verbose := c.Bool("verbose")
-	interactive := c.Bool("interactive")
-	processTemplates := c.Bool("processTemplates")
-	onlyTemplates := c.Bool("onlyTemplates")
-	dryRun := c.Bool("dryRun")
-	ignoreFlags := c.StringSlice("ignore")
+func (t *TemplateAction) Execute(_ context.Context, cmd *cli.Command) error {
+	inputFile := cmd.String("input")
+	dir := cmd.String("dir")
+	verbose := cmd.Bool("verbose")
+	interactive := cmd.Bool("interactive")
+	processTemplates := cmd.Bool("processTemplates")
+	onlyTemplates := cmd.Bool("onlyTemplates")
+	dryRun := cmd.Bool("dryRun")
+	ignoreFlags := cmd.StringSlice("ignore")
 
 	if dir == "" {
-		return fmt.Errorf("--dir is required for template command")
+		return helpers.UsageErr("--dir is required for template command")
 	}
 
 	// Validate flag combination
 	if onlyTemplates && !processTemplates {
-		return fmt.Errorf("--onlyTemplates requires --processTemplates to be set")
+		return helpers.UsageErr("--onlyTemplates requires --processTemplates to be set")
 	}
 
 	// Load defaults from config
@@ -48,7 +49,7 @@ func (t *TemplateAction) Execute(c *cli.Context) error {
 	if cfg == nil {
 		cfg = &domain.Config{}
 	}
-	startDelim, endDelim, fileSizeLimit := templateSettings(c, cfg)
+	startDelim, endDelim, fileSizeLimit := templateSettings(cmd, cfg)
 
 	var parsed domain.InputReplacement
 	var err error

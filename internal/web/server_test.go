@@ -25,19 +25,19 @@ type fakeCloner struct {
 
 func (f *fakeCloner) CloneRepository(repoURL, outputDir string) error {
 	f.lastRepo = repoURL
-	return os.WriteFile(filepath.Join(outputDir, "app.txt"), []byte("Hello [[NAME]]"), 0644)
+	return os.WriteFile(filepath.Join(outputDir, "app.txt"), []byte("Hello [[NAME]]"), 0o644)
 }
 
 func (f *fakeCloner) CloneRepositoryBranch(repoURL, branch, outputDir string) error {
 	f.lastRepo = repoURL
 	f.lastBranch = branch
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(outputDir, ".git"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(outputDir, ".git"), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(outputDir, "app.txt"), []byte(fmt.Sprintf("%s [[NAME]]", branch)), 0644)
+	return os.WriteFile(filepath.Join(outputDir, "app.txt"), []byte(fmt.Sprintf("%s [[NAME]]", branch)), 0o644)
 }
 
 func (f *fakeCloner) ListRemoteBranches(repoURL string) ([]string, error) {
@@ -71,7 +71,7 @@ func testServer(t *testing.T, dir string, forceDryRun bool) *Server {
 func TestScanAndDryRun(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "app.txt")
-	if err := os.WriteFile(path, []byte("Hello [[NAME:toUpperCase]]"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("Hello [[NAME:toUpperCase]]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -128,7 +128,7 @@ func TestScanAndDryRun(t *testing.T) {
 
 func TestEvaluateUpdatesPreviewValues(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "app.txt"), []byte("Env [[ENVIRONMENT|default:dev]] App [[APP_NAME:toUpperCase]]"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "app.txt"), []byte("Env [[ENVIRONMENT|default:dev]] App [[APP_NAME:toUpperCase]]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -178,7 +178,7 @@ func TestEvaluateUpdatesPreviewValues(t *testing.T) {
 func TestApplyAndForcedDryRun(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "app.txt")
-	if err := os.WriteFile(path, []byte("Hello [[NAME]]"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("Hello [[NAME]]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -380,7 +380,7 @@ func TestValidateDelimiters(t *testing.T) {
 // reaches the scanner.
 func TestSetDelimitersRejectsEmptyWithoutHanging(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "app.txt"), []byte("Hello [[NAME]]"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "app.txt"), []byte("Hello [[NAME]]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s := testServer(t, dir, false)
@@ -403,10 +403,10 @@ func TestSetDelimitersRejectsEmptyWithoutHanging(t *testing.T) {
 
 func TestSetDelimitersEndpointRescansWithNewPair(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "default.txt"), []byte("Hi [[OTHER]]"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "default.txt"), []byte("Hi [[OTHER]]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "custom.txt"), []byte("Hello <%NAME%>"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "custom.txt"), []byte("Hello <%NAME%>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -456,7 +456,7 @@ func TestSetDelimitersEndpointRescansWithNewPair(t *testing.T) {
 
 func TestSetDelimitersEndpointRejectsInvalidAndLeavesStateUnchanged(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "app.txt"), []byte("Hello [[NAME]]"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "app.txt"), []byte("Hello [[NAME]]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -576,7 +576,7 @@ func TestIndexReflectsCurrentDelimitersAfterChange(t *testing.T) {
 
 func TestSetDelimitersConcurrentAccessDoesNotRace(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "app.txt"), []byte("Hello [[NAME]] and <%NAME%>"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "app.txt"), []byte("Hello [[NAME]] and <%NAME%>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s := testServer(t, dir, false)

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-    "github.com/AxeForging/yankrun/domain"
+	"github.com/AxeForging/yankrun/domain"
 
 	"gopkg.in/yaml.v3"
 )

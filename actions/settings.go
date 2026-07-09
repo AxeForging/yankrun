@@ -2,24 +2,24 @@ package actions
 
 import (
 	"github.com/AxeForging/yankrun/domain"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-func templateSettings(c *cli.Context, cfg *domain.Config) (string, string, string) {
-	startDelim := c.String("startDelim")
-	endDelim := c.String("endDelim")
-	fileSizeLimit := c.String("fileSizeLimit")
+func templateSettings(cmd *cli.Command, cfg *domain.Config) (string, string, string) {
+	startDelim := cmd.String("startDelim")
+	endDelim := cmd.String("endDelim")
+	fileSizeLimit := cmd.String("fileSizeLimit")
 
 	if cfg == nil {
 		cfg = &domain.Config{}
 	}
-	if !c.IsSet("startDelim") && cfg.StartDelim != "" {
+	if !cmd.IsSet("startDelim") && cfg.StartDelim != "" {
 		startDelim = cfg.StartDelim
 	}
-	if !c.IsSet("endDelim") && cfg.EndDelim != "" {
+	if !cmd.IsSet("endDelim") && cfg.EndDelim != "" {
 		endDelim = cfg.EndDelim
 	}
-	if !c.IsSet("fileSizeLimit") && cfg.FileSizeLimit != "" {
+	if !cmd.IsSet("fileSizeLimit") && cfg.FileSizeLimit != "" {
 		fileSizeLimit = cfg.FileSizeLimit
 	}
 	if startDelim == "" {

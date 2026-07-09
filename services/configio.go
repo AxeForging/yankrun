@@ -24,10 +24,10 @@ func Load() (*domain.Config, error) {
 	if err != nil {
 		return cfg, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return cfg, err
 	}
-	f, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0600)
+	f, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		return cfg, err
 	}
@@ -41,7 +41,7 @@ func Save(cfg *domain.Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	f, err := os.Create(path)

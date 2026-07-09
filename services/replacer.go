@@ -655,7 +655,8 @@ func (fr *FileReplacer) stringToBytes(size string) (int64, error) {
 func (fr *FileReplacer) checkFileSize(fileInfo interface {
 	Size() int64
 	Name() string
-}, fileSizeLimit int64, verbose bool) bool {
+}, fileSizeLimit int64, verbose bool,
+) bool {
 	if fileInfo.Size() > fileSizeLimit {
 		if verbose {
 			helpers.Log.Debug().Msgf("Skipping file %s (size %d exceeds limit %d)", fileInfo.Name(), fileInfo.Size(), fileSizeLimit)

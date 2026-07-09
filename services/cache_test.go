@@ -24,7 +24,7 @@ func TestLoadCacheFrom_NonExistent(t *testing.T) {
 func TestLoadCacheFrom_Corrupt(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cache.yaml")
-	if err := os.WriteFile(path, []byte("{{invalid yaml"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("{{invalid yaml"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cache, err := LoadCacheFrom(path)
