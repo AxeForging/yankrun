@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<div class="progress-line" id="progressLine" aria-hidden="true"></div>
 <header class="topbar">
   <div class="brand">
     <svg class="mark" width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,6 +19,7 @@
     </svg>
     <span class="wordmark">yankrun</span>
     <span class="tagline">workbench</span>
+    {{if .ForceDryRun}}<span class="dry-badge" title="Server started with --dryRun: writes are blocked">DRY-RUN</span>{{end}}
   </div>
   <div class="topbar-actions">
     <div class="dir-pill" title="{{.Dir}}">{{.Dir}}</div>
@@ -53,13 +55,28 @@
   <main class="shell">
     <section class="grid">
       <div class="hero">
-        <div class="eyebrow"><span class="dot"></span>Scan · Preview · Apply</div>
+        <div class="flow" id="flow" aria-label="Workflow progress">
+          <span class="flow-step active" data-step="scan"><span class="flow-dot"></span>Scan</span>
+          <span class="flow-sep" aria-hidden="true">→</span>
+          <span class="flow-step" data-step="fill"><span class="flow-dot"></span>Fill</span>
+          <span class="flow-sep" aria-hidden="true">→</span>
+          <span class="flow-step" data-step="preview"><span class="flow-dot"></span>Preview</span>
+          <span class="flow-sep" aria-hidden="true">→</span>
+          <span class="flow-step" data-step="apply"><span class="flow-dot"></span>Apply</span>
+        </div>
         <h1>Template repos without guessing.</h1>
         <p>Edit discovered values, preview the exact diff, and apply only when the result is clear. The server is local by default and dry-run mode blocks writes.</p>
         <div id="notice" class="banner" role="status" aria-live="polite"></div>
         <div class="panel placeholder-panel">
-          <div class="toolbar"><strong>Discovered placeholders</strong><span class="status" id="status">loading</span></div>
-          <div class="rows" id="rows"><div class="empty">Scanning directory…</div></div>
+          <div class="toolbar">
+            <strong>Discovered placeholders</strong>
+            <div class="fill-wrap" id="fillWrap" hidden>
+              <span class="fill-label" id="fillLabel"></span>
+              <div class="fill-bar" aria-hidden="true"><div class="fill-fill" id="fillFill"></div></div>
+            </div>
+            <span class="status" id="status">loading</span>
+          </div>
+          <div class="rows" id="rows"></div>
         </div>
       </div>
       <aside class="side" aria-label="Actions">
@@ -104,9 +121,10 @@
           <div class="metric"><span>Write mode</span><strong id="metricMode">{{if .ForceDryRun}}DRY{{else}}LIVE{{end}}</strong></div>
           <div class="actions">
             <button class="quiet" id="refresh">Rescan</button>
-            <button class="ghost" id="preview">Preview</button>
+            <button class="ghost" id="preview" title="Preview diffs without writing (Ctrl+Enter)">Preview</button>
             <button class="primary" id="apply" data-force-dry="{{if .ForceDryRun}}true{{else}}false{{end}}" {{if .ForceDryRun}}disabled{{end}}>Apply</button>
           </div>
+          <p class="kbd-hint"><kbd>ctrl</kbd><kbd>⏎</kbd> preview · <kbd>/</kbd> search presets · <kbd>esc</kbd> dismiss</p>
         </div>
       </aside>
     </section>
