@@ -70,6 +70,14 @@ yankrun template --dir ./project --input values.yaml --startDelim "<%" --endDeli
 
 ## Install
 
+```sh
+curl -fsSL https://raw.githubusercontent.com/AxeForging/yankrun/main/install.sh | sh
+```
+
+The installer downloads the release for your platform and verifies its SHA-256
+checksum. Set `YANKRUN_VERSION=v0.8.0` to pin a release or
+`YANKRUN_INSTALL_DIR=~/.local/bin` to choose the destination.
+
 <details>
 <summary><strong>Linux/macOS (AMD64)</strong></summary>
 
@@ -126,6 +134,15 @@ sudo mv yankrun /usr/local/bin/
 ```
 
 </details>
+
+---
+
+## Pull request quality gates
+
+PR validation runs [Structlint](https://github.com/AxeForging/structlint) and
+[Dupehound](https://github.com/AxeForging/dupehound) through
+[Gauntlet](https://github.com/AxeForging/gauntlet). Structural findings apply to
+the whole run; duplication findings are scoped to lines changed by the PR.
 
 ---
 
